@@ -1,0 +1,45 @@
+# Translation file - Auto-generated
+# Language: ar
+#
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: ar\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+
+msgid "\nthis is the drmagdy module\n"
+msgstr ""
+
+msgctxt "ui/views/views.py"
+msgid "Email Address"
+msgstr ""
+
+msgctxt "ui/views/views.py"
+msgid "ID"
+msgstr ""
+
+msgctxt "ui/views/views.py"
+msgid "Last Login"
+msgstr ""
+
+msgctxt "ui/views/views.py"
+msgid "Name"
+msgstr ""
+
+msgctxt "ui/views/views.py"
+msgid "Phone"
+msgstr ""
+
+msgid "Supervisor"
+msgstr ""
+
+msgid "Supervisor responsible for this lead"
+msgstr ""
+
+msgid "drmagdy"
+msgstr ""
+
+msgid "this is the drmagdy module"
+msgstr ""
+

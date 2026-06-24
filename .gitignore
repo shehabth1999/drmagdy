@@ -1,0 +1,59 @@
+# ── Python ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+.python-version
+
+# ── Env / secrets ────────────────────────────────────────
+.env*
+*.lock
+*.bak
+*.tmp
+*.pid
+
+# ── Celery ───────────────────────────────────────────────
+celerybeat-schedule
+celerybeat-schedule.db
+celerybeat.pid
+
+# ── Django ───────────────────────────────────────────────
+*.log
+*.logs
+db.sqlite3
+db.sqlite3-journal
+media/*
+staticfiles/*
+
+# ── Virtualenv ───────────────────────────────────────────
+.venv
+venv/
+
+# ── Testing ──────────────────────────────────────────────
+.pytest_cache/
+/coverage/
+/htmlcov/
+junit.xml
+
+# ── Frontend (if pages/ are added later) ─────────────────
+node_modules
+/dist/
+/.vite/
+/.cache/
+*.tsbuildinfo
+
+# ── Editors ──────────────────────────────────────────────
+.idea
+.vscode/*
+!.vscode/extensions.json
+.cursorrules
+.DS_Store
+*.sw?
+
+# ── Claude / AI tooling ──────────────────────────────────
+CLAUDE.md
+/claude/*
+/.claude/*
