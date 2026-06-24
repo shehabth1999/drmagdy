@@ -1,48 +1,6 @@
 # -*- coding: utf-8 -*-
-# UI Views for drmagdy module
+# UI Views for drmagdy module.
+# Real views live in their own files in this folder:
+#   - lead_form_patch.py    (crm.lead form: payment_receipt)
+#   - ticket_form_patch.py  (support.ticket form: supervisor)
 from django.utils.translation import gettext as _
-
-# model_list_view = {
-#     "key": "model_list_view",
-#     "name": "model list view",
-#     "model": "drmagdy.model",
-#     "view_type": "list",
-#     "priority": 20,
-#     'module': 'drmagdy',
-#     "body": {
-#         "tree": {
-#             "fields": [
-#                 {
-#                     "name": "id",
-#                     "widget": "number",
-#                     "string": _("ID"),
-#                     "help": True,
-#                     "formatter": "number"
-#                 },
-#                 {
-#                     "name": "name", 
-#                     "widget": "text",
-#                     "string": _("Name"),
-#                     "help": "Primary contact name",
-#                 },
-#                 {
-#                     "name": "email", 
-#                     "widget": "text",
-#                     "string": _("Email Address"),
-#                     "help": "Primary email contact",
-#                 },
-#                 {
-#                     "name": "phone",
-#                     "string": _("Phone"),
-#                     "help": "Primary phone contact",
-#                 },
-#                 {
-#                     "name": "last_login",
-#                     "string": _("Last Login"),
-#                     "help": "Last login date",
-#                     "widget": "datetime",
-#                 }
-#             ]
-#         }
-#     }
-# }
