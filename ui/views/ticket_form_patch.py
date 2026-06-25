@@ -2,11 +2,12 @@
 """
 drmagdy Module - Support Ticket Form View Patch.
 
-Injects the ``supervisor`` field (FK to ``base.user``) into the support ticket
-form view (key: ``support_supportticket_form_view``), right after the
-``assigned_to`` field in the first group.
+Injects two fields into the support ticket form view
+(key: ``support_supportticket_form_view``):
+  - ``supervisor`` (FK to ``base.user``) after ``assigned_to``.
+  - ``files`` (single image) after ``email``.
 
-The field itself is injected into the ``support.ticket`` model by
+Both fields are injected into the ``support.ticket`` model by
 ``TicketExtension`` in ``drmagdy/extensions.py``.
 """
 from django.utils.translation import gettext as _
@@ -36,6 +37,18 @@ ticket_form_drmagdy_supervisor_patch = {
                 "placeholder": _("Select supervisor..."),
                 "help": _("Supervisor responsible for this ticket"),
             },
-        }
+        },
+        {
+            "operation": "after",
+            "target": "field[name=email]",
+            "content": {
+                "name": "files",
+                "widget": "image",
+                "string": _("Files"),
+                "required": False,
+                "readonly": False,
+                "help": _("Image attached to this ticket"),
+            },
+        },
     ],
 }

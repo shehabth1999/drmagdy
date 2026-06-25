@@ -34,7 +34,30 @@ menu_dict = {
                         ]
                     },
                 },
-            }
+            },
+            {
+                "operation": "append",
+                "target": "actions",
+                "content": {
+                    # MUST match the @action method name exactly.
+                    "name": "action_create_ticket_from_message",
+                    "string": _("Create Ticket"),
+                    "icon": "Ticket",
+                    "type": "server",
+                    "as": "button",
+                    "variant": "primary",
+                    "selection_required": True,
+                    "confirm_required": False,
+                    # Show ONLY for a single text or image message. Hide when more
+                    # than one selected OR the message is neither text nor image.
+                    "invisible": {
+                        "or": [
+                            {"field": "_selected_count", "operator": "gt", "value": 1},
+                            {"field": "type", "operator": "not_in", "value": ["text", "image"]},
+                        ]
+                    },
+                },
+            },
         ],
     }
 }
