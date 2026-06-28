@@ -1,4 +1,4 @@
-# Translation file - drmagdy module
+# Translation file - Auto-generated
 # Language: ar
 #
 msgid ""
@@ -8,19 +8,46 @@ msgstr ""
 "Language: ar\n"
 "Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
 
-# ── Manifest ─────────────────────────────────────────────
-msgid "drmagdy"
-msgstr "drmagdy"
-
-msgid "this is the drmagdy module"
-msgstr "هذه وحدة drmagdy"
-
 msgid "\nthis is the drmagdy module\n"
 msgstr "\nهذه وحدة drmagdy\n"
 
-# ── Lead: payment receipt (extensions.py + lead_form_patch.py) ──
+msgid "Create Ticket"
+msgstr ""
+
+msgid "Files"
+msgstr ""
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Files"
+msgstr ""
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Image attached to this ticket"
+msgstr ""
+
+msgid "Image attached to this ticket (e.g. the requested medicine / prescription)"
+msgstr ""
+
+msgid "Lead: %(name)s"
+msgstr ""
+
+msgid "Mark Lead Won (Receipt)"
+msgstr ""
+
+msgid "No customer is linked to this conversation."
+msgstr "لا يوجد عميل مرتبط بهذه المحادثة."
+
+msgid "No message selected."
+msgstr "لم يتم تحديد أي رسالة."
+
+msgid "No open lead was found for this customer."
+msgstr "لم يتم العثور على عميل محتمل مفتوح لهذا العميل."
+
+msgid "Out-of-stock request"
+msgstr ""
+
 msgid "Payment Receipt"
-msgstr "إيصال الدفع"
+msgstr ""
 
 msgctxt "ui/views/lead_form_patch.py"
 msgid "Payment Receipt"
@@ -33,43 +60,66 @@ msgctxt "ui/views/lead_form_patch.py"
 msgid "Payment receipt used to mark this lead as Won"
 msgstr "إيصال الدفع المستخدم لتمييز هذا العميل المحتمل كرابح"
 
-# ── Ticket: supervisor (extensions.py + ticket_form_patch.py) ──
-msgid "Supervisor"
-msgstr "المشرف"
+msgid "Please select a branch before creating a ticket."
+msgstr ""
 
-msgctxt "ui/views/ticket_form_patch.py"
-msgid "Supervisor"
-msgstr "المشرف"
+msgid "Receipt saved and lead \\"
+msgstr "تم حفظ الإيصال وتمييز العميل المحتمل \\"
 
-msgid "Supervisor responsible for this ticket"
-msgstr "المشرف المسؤول عن هذه التذكرة"
-
-msgctxt "ui/views/ticket_form_patch.py"
-msgid "Supervisor responsible for this ticket"
-msgstr "المشرف المسؤول عن هذه التذكرة"
+msgid "Request from %(n)s"
+msgstr ""
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Select supervisor..."
 msgstr "اختر المشرف..."
 
-# ── Chat message action: Mark Lead Won (Receipt) ─────────
-msgid "Mark Lead Won (Receipt)"
-msgstr "تمييز العميل المحتمل كرابح (إيصال)"
+msgid "Source Message"
+msgstr ""
 
-msgid "No message selected."
-msgstr "لم يتم تحديد أي رسالة."
+msgid "Supervisor"
+msgstr ""
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Supervisor"
+msgstr "المشرف"
+
+msgid "Supervisor responsible for this ticket"
+msgstr "المشرف المسؤول عن هذه التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Supervisor responsible for this ticket"
+msgstr "المشرف المسؤول عن هذه التذكرة"
+
+msgid "The chat message this ticket was created from (one ticket per message)."
+msgstr ""
+
+msgid "The chat message whose payment receipt marked this lead as Won."
+msgstr ""
 
 msgid "This action only works on a single image message."
 msgstr "يعمل هذا الإجراء فقط على رسالة صورة واحدة."
 
+msgid "This action only works on a single text or image message."
+msgstr ""
+
+msgid "This image has no stored file to attach."
+msgstr ""
+
 msgid "This image has no stored file to copy."
 msgstr "لا تحتوي هذه الصورة على ملف مخزَّن لنسخه."
 
-msgid "No customer is linked to this conversation."
-msgstr "لا يوجد عميل مرتبط بهذه المحادثة."
+msgid "Ticket created."
+msgstr ""
 
-msgid "No open lead was found for this customer."
-msgstr "لم يتم العثور على عميل محتمل مفتوح لهذا العميل."
+msgid "Ticket opened."
+msgstr ""
 
-msgid "Receipt saved and lead \"%(name)s\" marked as Won."
-msgstr "تم حفظ الإيصال وتمييز العميل المحتمل \"%(name)s\" كرابح."
+msgid "Ticket: %(name)s"
+msgstr ""
+
+msgid "drmagdy"
+msgstr ""
+
+msgid "this is the drmagdy module"
+msgstr "هذه وحدة drmagdy"
+

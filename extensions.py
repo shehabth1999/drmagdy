@@ -1,10 +1,60 @@
 # -*- coding: utf-8 -*-
-from django.db import models
+from django.core.cache import cache
+from django.db import models, IntegrityError
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import gettext
 from modules.base.model_inheritance import ModelExtension
 from modules.base.decorators import action
 from modules.base.fields import AttachmentForeignKeyField
+
+
+# Cache the resolved "New" ticket-stage id for a day. Stages are company-scoped
+# (CompanyMixin) and change rarely, so a per-company cache turns a SQL hit into a
+# memory hit on the hot path (every "Create Ticket" click).
+NEW_TICKET_STAGE_CACHE_TIMEOUT = 60 * 60 * 24  # 1 day, in seconds
+
+
+def _new_ticket_stage_cache_key(company_id):
+    return f"drmagdy:support:new_ticket_stage_id:{company_id or 0}"
+
+
+def get_new_ticket_stage_id(env, force_refresh=False):
+    """Return the id of the stage new tickets should land in, cached for 1 day.
+
+    Priority (resolved in a SINGLE query): a stage named "New", else the first
+    OPEN stage by sequence, else any stage by sequence. Returns ``None`` if no
+    stages exist (never cached, so it re-checks next time).
+
+    Pass ``force_refresh=True`` to bypass + rewrite the cache — used to recover
+    when a stale cached id points at a deleted stage and the ticket insert fails.
+    """
+    company = getattr(env, 'company', None)
+    cache_key = _new_ticket_stage_cache_key(getattr(company, 'id', None))
+
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+    from modules.support.models import TicketStage
+
+    stage_id = (
+        TicketStage.objects.annotate(
+            _match_rank=models.Case(
+                models.When(name__iexact="New", then=models.Value(0)),
+                models.When(is_closed=False, then=models.Value(1)),
+                default=models.Value(2),
+                output_field=models.IntegerField(),
+            )
+        )
+        .order_by("_match_rank", "sequence")
+        .values_list("id", flat=True)
+        .first()
+    )
+
+    if stage_id is not None:
+        cache.set(cache_key, stage_id, NEW_TICKET_STAGE_CACHE_TIMEOUT)
+    return stage_id
 
 
 class TicketExtension(ModelExtension):
@@ -189,7 +239,7 @@ class MessageExtension(ModelExtension):
           the Subject/Description.
         """
         from modules.base.models.attachment import Attachment
-        from modules.support.models import Ticket
+        from modules.support.models import Ticket, TicketStage
 
         message = self.first()
         if message is None:
@@ -250,8 +300,13 @@ class MessageExtension(ModelExtension):
 
         partner = getattr(message.conversation, 'social_partner', None)
 
+        # New tickets must land in the "New" stage (cached for 1 day per company).
+        stage_id = get_new_ticket_stage_id(message.env)
+
         # Link the ticket to its source message (enforces one-ticket-per-message).
         vals = {'branch': branch, 'source_message': message}
+        if stage_id is not None:
+            vals['stage_id'] = stage_id
         if partner is not None:
             vals['partner'] = partner
             vals['email'] = partner.email or ''
@@ -283,7 +338,19 @@ class MessageExtension(ModelExtension):
             else:
                 vals['name'] = gettext("Out-of-stock request")
 
-        ticket = Ticket.create(**vals)
+        # The cached stage id can go stale (stage deleted) and break the insert
+        # with a FK IntegrityError. If that happens, force-refresh the stage id
+        # once and retry; if even the fresh lookup yields nothing, create without
+        # a stage rather than fail the whole action.
+        try:
+            ticket = Ticket.create(**vals)
+        except IntegrityError:
+            fresh_stage_id = get_new_ticket_stage_id(message.env, force_refresh=True)
+            if fresh_stage_id is not None:
+                vals['stage_id'] = fresh_stage_id
+            else:
+                vals.pop('stage_id', None)
+            ticket = Ticket.create(**vals)
 
         # Open the freshly created ticket's form in a slideover (edit mode).
         return _open_ticket(ticket, created=True)
