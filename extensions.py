@@ -274,7 +274,9 @@ class MessageExtension(ModelExtension):
                     'menu_item_key': 'support_main_menu_tickets_my_tickets',
                     'view_type': 'form',
                     'id': ticket.id,
-                    'context': {},
+                    # Pass the assignee through as context for the opened form
+                    # (works from both the message list and form views).
+                    'context': {'assigned_to': ticket.assigned_to_id} if ticket.assigned_to_id else {},
                     'type': 'action',
                     'title': gettext("Ticket: %(name)s") % {'name': ticket.name},
                 },
@@ -311,6 +313,12 @@ class MessageExtension(ModelExtension):
             vals['partner'] = partner
             vals['email'] = partner.email or ''
             vals['phone'] = partner.phone or partner.mobile or ''
+
+        # Assign the new ticket to the agent who triggered the action (from the
+        # message list/form view), so it lands on their plate instead of unassigned.
+        agent = getattr(message.env, 'user', None)
+        if agent is not None and getattr(agent, 'is_authenticated', False):
+            vals['assigned_to'] = agent
 
         if message.type == 'text':
             text = ''

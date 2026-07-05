@@ -12,27 +12,27 @@ msgid "\nthis is the drmagdy module\n"
 msgstr "\nهذه وحدة drmagdy\n"
 
 msgid "Create Ticket"
-msgstr ""
+msgstr "إنشاء تذكرة"
 
 msgid "Files"
-msgstr ""
+msgstr "الملفات"
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Files"
-msgstr ""
+msgstr "الملفات"
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Image attached to this ticket"
-msgstr ""
+msgstr "صورة مرفقة بهذه التذكرة"
 
 msgid "Image attached to this ticket (e.g. the requested medicine / prescription)"
-msgstr ""
+msgstr "صورة مرفقة بهذه التذكرة (مثل الدواء المطلوب / الوصفة الطبية)"
 
 msgid "Lead: %(name)s"
-msgstr ""
+msgstr "عميل محتمل: %(name)s"
 
 msgid "Mark Lead Won (Receipt)"
-msgstr ""
+msgstr "تمييز العميل المحتمل كرابح (إيصال)"
 
 msgid "No customer is linked to this conversation."
 msgstr "لا يوجد عميل مرتبط بهذه المحادثة."
@@ -44,10 +44,10 @@ msgid "No open lead was found for this customer."
 msgstr "لم يتم العثور على عميل محتمل مفتوح لهذا العميل."
 
 msgid "Out-of-stock request"
-msgstr ""
+msgstr "طلب صنف غير متوفر"
 
 msgid "Payment Receipt"
-msgstr ""
+msgstr "إيصال الدفع"
 
 msgctxt "ui/views/lead_form_patch.py"
 msgid "Payment Receipt"
@@ -61,23 +61,23 @@ msgid "Payment receipt used to mark this lead as Won"
 msgstr "إيصال الدفع المستخدم لتمييز هذا العميل المحتمل كرابح"
 
 msgid "Please select a branch before creating a ticket."
-msgstr ""
+msgstr "يرجى اختيار فرع قبل إنشاء تذكرة."
 
-msgid "Receipt saved and lead \\"
-msgstr "تم حفظ الإيصال وتمييز العميل المحتمل \\"
+msgid "Receipt saved and lead \\\\\\\\"
+msgstr "تم حفظ الإيصال وتمييز العميل المحتمل \\\\\\\\"
 
 msgid "Request from %(n)s"
-msgstr ""
+msgstr "طلب من %(n)s"
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Select supervisor..."
 msgstr "اختر المشرف..."
 
 msgid "Source Message"
-msgstr ""
+msgstr "الرسالة المصدر"
 
 msgid "Supervisor"
-msgstr ""
+msgstr "المشرف"
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Supervisor"
@@ -91,34 +91,34 @@ msgid "Supervisor responsible for this ticket"
 msgstr "المشرف المسؤول عن هذه التذكرة"
 
 msgid "The chat message this ticket was created from (one ticket per message)."
-msgstr ""
+msgstr "رسالة المحادثة التي أُنشئت منها هذه التذكرة (تذكرة واحدة لكل رسالة)."
 
 msgid "The chat message whose payment receipt marked this lead as Won."
-msgstr ""
+msgstr "رسالة المحادثة التي أدى إيصال الدفع الخاص بها إلى تمييز هذا العميل المحتمل كرابح."
 
 msgid "This action only works on a single image message."
 msgstr "يعمل هذا الإجراء فقط على رسالة صورة واحدة."
 
 msgid "This action only works on a single text or image message."
-msgstr ""
+msgstr "يعمل هذا الإجراء فقط على رسالة نصية أو صورة واحدة."
 
 msgid "This image has no stored file to attach."
-msgstr ""
+msgstr "لا تحتوي هذه الصورة على ملف مخزَّن لإرفاقه."
 
 msgid "This image has no stored file to copy."
 msgstr "لا تحتوي هذه الصورة على ملف مخزَّن لنسخه."
 
 msgid "Ticket created."
-msgstr ""
+msgstr "تم إنشاء التذكرة."
 
 msgid "Ticket opened."
-msgstr ""
+msgstr "تم فتح التذكرة."
 
 msgid "Ticket: %(name)s"
-msgstr ""
+msgstr "تذكرة: %(name)s"
 
 msgid "drmagdy"
-msgstr ""
+msgstr "drmagdy"
 
 msgid "this is the drmagdy module"
 msgstr "هذه وحدة drmagdy"

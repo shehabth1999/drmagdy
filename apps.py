@@ -8,3 +8,5 @@ class DrmagdyConfig(AppConfig):
     def ready(self):
         super().ready()
         from . import extensions  # noqa: F401
+        from . import patches
+        patches.apply_patches()
