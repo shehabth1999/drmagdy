@@ -274,9 +274,9 @@ class MessageExtension(ModelExtension):
                     'menu_item_key': 'support_main_menu_tickets_my_tickets',
                     'view_type': 'form',
                     'id': ticket.id,
-                    # Pass the assignee through as context for the opened form
-                    # (works from both the message list and form views).
-                    'context': {'assigned_to': ticket.assigned_to_id} if ticket.assigned_to_id else {},
+                    # Pass the assignee through as context (default_fields) for the
+                    # opened form (works from both the message list and form views).
+                    'context': {'default_fields': {'assigned_to': ticket.assigned_to_id}} if ticket.assigned_to_id else {},
                     'type': 'action',
                     'title': gettext("Ticket: %(name)s") % {'name': ticket.name},
                 },
