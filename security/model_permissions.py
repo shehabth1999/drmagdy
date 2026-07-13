@@ -5,17 +5,17 @@ Format: [view, add, change, delete] as [0/1, 0/1, 0/1, 0/1]
 """
 
 MODEL_PERMISSIONS = [
-    # Example: Model1
-    # {
-    #     'model': 'drmagdy.modelname',
-    #     'group': 'drmagdy.users',
-    #     'permissions': [1, 1, 1, 0],  # view, add, change, no delete
-    # },
-    # {
-    #     'model': 'drmagdy.modelname',
-    #     'group': 'drmagdy.admins',
-    #     'permissions': [1, 1, 1, 1],  # full access
-    # },
+    # Bank Roshtat (prescription bank) — users manage (no delete), admins full.
+    {
+        'model': 'drmagdy.bankroshtat',
+        'group': 'drmagdy.users',
+        'permissions': [1, 1, 1, 0],  # view, add, change, no delete
+    },
+    {
+        'model': 'drmagdy.bankroshtat',
+        'group': 'drmagdy.admins',
+        'permissions': [1, 1, 1, 1],  # full access
+    },
 ]
 
 # Permission patterns for convenience

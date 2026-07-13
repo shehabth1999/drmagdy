@@ -362,3 +362,90 @@ class MessageExtension(ModelExtension):
 
         # Open the freshly created ticket's form in a slideover (edit mode).
         return _open_ticket(ticket, created=True)
+
+    @action
+    def action_create_bank_roshtat_from_message(self):
+        """Single IMAGE message -> create a BankRoshtat row (copy the chat image
+        into a base Attachment) and open the new row's form in a slideover.
+
+        Enforces one-row-per-message: if a row already exists for this message
+        we re-open it instead of creating a second one.
+        """
+        from modules.base.models.attachment import Attachment
+        from drmagdy.models import BankRoshtat
+
+        message = self.first()
+        if message is None:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("No message selected."),
+                'data': {},
+            }
+
+        # Guard: images only (the button schema enforces this too, but never
+        # trust the client).
+        if message.type != 'image':
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("This action only works on a single image message."),
+                'data': {},
+            }
+
+        def _open_roshtat(roshtat, created):
+            """Directly open the row's form in a slideover (edit mode)."""
+            return {
+                'status': True,
+                'open_mode': 'slideover',
+                'message': gettext("Prescription saved.") if created else gettext("Prescription opened."),
+                'data': {
+                    'menu_item_key': 'drmagdy_main_menu_bank_roshtat',
+                    'view_type': 'form',
+                    'id': roshtat.id,
+                    'context': {},
+                    'type': 'action',
+                    'title': gettext("Bank Roshtat: %(name)s") % {'name': roshtat.name},
+                },
+            }
+
+        # ONE ROW PER MESSAGE. The `message` OneToOne guarantees uniqueness at
+        # the DB level; here we look it up first so we re-open rather than error.
+        existing = BankRoshtat.objects.filter(message=message).first()
+        if existing is not None:
+            return _open_roshtat(existing, created=False)
+
+        # The image must have a stored file to copy.
+        message_attachment = getattr(message, 'attachment', None)
+        if message_attachment is None or not getattr(getattr(message_attachment, 'file', None), 'name', None):
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("This image has no stored file to copy."),
+                'data': {},
+            }
+
+        # Copy the chat image into a base Attachment (references the SAME file —
+        # no re-upload).
+        attachment = Attachment.from_chat_attachment(message_attachment)
+
+        # Auto-generate the name from the chat: prefer the image caption, else
+        # the customer's name, else a sensible default.
+        partner = getattr(message.conversation, 'social_partner', None)
+        caption = (getattr(message_attachment, 'caption', '') or '').strip()
+        if caption:
+            name = caption[:255]
+        elif partner is not None and getattr(partner, 'name', None):
+            name = gettext("Roshta from %(n)s") % {'n': partner.name}
+        else:
+            name = gettext("Roshta")
+
+        roshtat = BankRoshtat.create(
+            name=name,
+            message=message,
+            attachment=attachment,
+            notes=caption,
+        )
+
+        # Open the freshly created row's form in a slideover (edit mode).
+        return _open_roshtat(roshtat, created=True)

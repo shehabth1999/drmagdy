@@ -58,6 +58,29 @@ menu_dict = {
                     },
                 },
             },
+            {
+                "operation": "append",
+                "target": "actions",
+                "content": {
+                    # MUST match the @action method name exactly.
+                    "name": "action_create_bank_roshtat_from_message",
+                    "string": _("Save to Bank Roshtat"),
+                    "icon": "FileImage",
+                    "type": "server",
+                    "as": "button",
+                    "variant": "secondary",
+                    "selection_required": True,
+                    "confirm_required": False,
+                    # IMAGES ONLY. Show only when exactly one image message is
+                    # selected. Hide when count > 1 OR type != image.
+                    "invisible": {
+                        "or": [
+                            {"field": "_selected_count", "operator": "gt", "value": 1},
+                            {"field": "type", "operator": "ne", "value": "image"},
+                        ]
+                    },
+                },
+            },
         ],
     }
 }
