@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from django.core.cache import cache
-from django.db import models, IntegrityError
+from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import gettext
 from modules.base.model_inheritance import ModelExtension
@@ -55,6 +55,32 @@ def get_new_ticket_stage_id(env, force_refresh=False):
     if stage_id is not None:
         cache.set(cache_key, stage_id, NEW_TICKET_STAGE_CACHE_TIMEOUT)
     return stage_id
+
+
+def _serialize_attachment_for_form(attachment):
+    """Serialize a base Attachment into the dict shape the image/files widgets
+    render in a create form.
+
+    The dict carries a ``url`` (so the widget shows the image) and an ``id`` — on
+    save the attachment pipeline (``Attachment.process_attachment_data``) resolves
+    a dict-with-id back to the SAME attachment, so no duplicate is created and the
+    original chat file is reused. Returns ``None`` for a missing attachment.
+    """
+    if attachment is None:
+        return None
+    try:
+        url = attachment.file.url if getattr(attachment, 'file', None) else None
+    except Exception:
+        url = None
+    return {
+        'id': attachment.id,
+        'name': attachment.name,
+        'url': url,
+        'thumbnail_url': url,
+        'mime_type': attachment.mime_type,
+        'size': attachment.size,
+        'type': attachment.type,
+    }
 
 
 class TicketExtension(ModelExtension):
@@ -194,12 +220,36 @@ class MessageExtension(ModelExtension):
         # `last_lead` (crm.PartnerExtension) = the partner's most recent OPEN lead.
         lead = getattr(partner, 'last_lead', None)
         if lead is None:
-            return {
-                'status': False,
-                'open_mode': 'message',
-                'message': gettext("No open lead was found for this customer."),
-                'data': {},
+            # No open lead for this customer — auto-generate one so the receipt
+            # always has a lead to close (this action creates directly, on
+            # purpose). Branch is required (Lead is BranchMixin): resolve from
+            # context, falling back to the first branch like the WhatsApp
+            # lead-capture task does.
+            from modules.crm.models import Lead
+
+            branch = getattr(message.env, 'branch', None)
+            if branch is None:
+                from modules.base.models import Branch
+                branch = Branch.objects.first()
+
+            lead_vals = {
+                'name': (getattr(partner, 'name', '') or gettext("Lead from receipt")),
+                'partner': partner,
+                'email': partner.email or '',
+                'phone': partner.phone or getattr(partner, 'mobile', '') or '',
+                'branch': branch,
             }
+
+            # Assign the auto-created lead to the agent who ran the action (the
+            # onchange that would set partner.sales_agent does NOT fire on a
+            # backend create, so assigned_to would otherwise be null).
+            # `self.env.user` (queryset env, thread-local context) is the
+            # authenticated user or None, independent of the message — a plain
+            # truthiness check is enough.
+            if self.env.user:
+                lead_vals['assigned_to'] = self.env.user
+
+            lead = Lead.create(**lead_vals)
 
         # Copy the chat image into a base Attachment (references the SAME file).
         attachment = Attachment.from_chat_attachment(message_attachment)
@@ -289,8 +339,9 @@ class MessageExtension(ModelExtension):
         if existing is not None:
             return _open_ticket(existing, created=False)
 
-        # Ticket requires a branch (BranchMixin). It auto-fills from env.branch on
-        # save, but resolve + guard here so the agent gets a friendly message.
+        # Ticket requires a branch (BranchMixin). The form auto-fills it from
+        # env.branch on save, but resolve + guard here so the agent gets a
+        # friendly message and the form is pre-filled with the right branch.
         branch = getattr(message.env, 'branch', None)
         if branch is None:
             return {
@@ -302,30 +353,38 @@ class MessageExtension(ModelExtension):
 
         partner = getattr(message.conversation, 'social_partner', None)
 
-        # New tickets must land in the "New" stage (cached for 1 day per company).
+        # New tickets should land in the "New" stage (cached for 1 day per
+        # company). Resolve the Stage object so the relation field pre-fills with
+        # a proper label; a stale/deleted id just yields None and is skipped.
         stage_id = get_new_ticket_stage_id(message.env)
+        stage = TicketStage.objects.filter(pk=stage_id).first() if stage_id else None
 
-        # Link the ticket to its source message (enforces one-ticket-per-message).
-        vals = {'branch': branch, 'source_message': message}
-        if stage_id is not None:
-            vals['stage_id'] = stage_id
+        # Build the create-form defaults instead of creating the ticket. The
+        # server-action layer turns model instances into {id, name} for relation
+        # widgets; the image is a serialized dict that round-trips to the SAME
+        # attachment on save. `source_message` is hidden but still saved (it
+        # enforces one-ticket-per-message once the agent saves).
+        default_fields = {'branch': branch, 'source_message': message}
+        if stage is not None:
+            default_fields['stage'] = stage
         if partner is not None:
-            vals['partner'] = partner
-            vals['email'] = partner.email or ''
-            vals['phone'] = partner.phone or partner.mobile or ''
+            default_fields['partner'] = partner
+            default_fields['email'] = partner.email or ''
+            default_fields['phone'] = partner.phone or partner.mobile or ''
 
-        # Assign the new ticket to the agent who triggered the action (from the
-        # message list/form view), so it lands on their plate instead of unassigned.
-        agent = getattr(message.env, 'user', None)
-        if agent is not None and getattr(agent, 'is_authenticated', False):
-            vals['assigned_to'] = agent
+        # Pre-assign to the agent who triggered the action, so the saved ticket
+        # lands on their plate instead of unassigned. `self.env.user` is the
+        # authenticated user or None (thread-local context, not tied to the
+        # message), so a plain truthiness check is enough.
+        if self.env.user:
+            default_fields['assigned_to'] = self.env.user
 
         if message.type == 'text':
             text = ''
             if isinstance(message.content, dict):
                 text = (message.content.get('text') or '').strip()
-            vals['description'] = text
-            vals['name'] = text[:80].strip() or gettext("Out-of-stock request")
+            default_fields['description'] = text
+            default_fields['name'] = text[:80].strip() or gettext("Out-of-stock request")
         else:  # image
             message_attachment = getattr(message, 'attachment', None)
             if message_attachment is None or not getattr(getattr(message_attachment, 'file', None), 'name', None):
@@ -335,33 +394,35 @@ class MessageExtension(ModelExtension):
                     'message': gettext("This image has no stored file to attach."),
                     'data': {},
                 }
-            # Copy the chat image into a base Attachment (references the SAME file).
-            vals['files'] = Attachment.from_chat_attachment(message_attachment)
+            # Copy the chat image into a base Attachment (references the SAME file)
+            # and pre-fill the `files` widget with it.
+            attachment = Attachment.from_chat_attachment(message_attachment)
+            default_fields['files'] = _serialize_attachment_for_form(attachment)
             caption = (getattr(message_attachment, 'caption', '') or '').strip()
-            vals['description'] = caption
+            default_fields['description'] = caption
             if caption:
-                vals['name'] = caption[:80]
+                default_fields['name'] = caption[:80]
             elif partner is not None:
-                vals['name'] = gettext("Request from %(n)s") % {'n': partner.name}
+                default_fields['name'] = gettext("Request from %(n)s") % {'n': partner.name}
             else:
-                vals['name'] = gettext("Out-of-stock request")
+                default_fields['name'] = gettext("Out-of-stock request")
 
-        # The cached stage id can go stale (stage deleted) and break the insert
-        # with a FK IntegrityError. If that happens, force-refresh the stage id
-        # once and retry; if even the fresh lookup yields nothing, create without
-        # a stage rather than fail the whole action.
-        try:
-            ticket = Ticket.create(**vals)
-        except IntegrityError:
-            fresh_stage_id = get_new_ticket_stage_id(message.env, force_refresh=True)
-            if fresh_stage_id is not None:
-                vals['stage_id'] = fresh_stage_id
-            else:
-                vals.pop('stage_id', None)
-            ticket = Ticket.create(**vals)
-
-        # Open the freshly created ticket's form in a slideover (edit mode).
-        return _open_ticket(ticket, created=True)
+        # Open a BLANK create form (no id) pre-filled with the defaults. The agent
+        # reviews/edits and must SAVE to actually create the ticket — no
+        # auto-create.
+        return {
+            'status': True,
+            'open_mode': 'slideover',
+            'message': gettext("Review the details and save to create the ticket."),
+            'data': {
+                'menu_item_key': 'support_main_menu_tickets_my_tickets',
+                'view_type': 'form',
+                # No 'id' -> the form opens in create mode.
+                'context': {'default_fields': default_fields},
+                'type': 'action',
+                'title': gettext("New Ticket"),
+            },
+        }
 
     @action
     def action_create_bank_roshtat_from_message(self):
@@ -426,7 +487,7 @@ class MessageExtension(ModelExtension):
             }
 
         # Copy the chat image into a base Attachment (references the SAME file —
-        # no re-upload).
+        # no re-upload) so the `attachment` widget pre-fills with it.
         attachment = Attachment.from_chat_attachment(message_attachment)
 
         # Auto-generate the name from the chat: prefer the image caption, else
@@ -440,12 +501,30 @@ class MessageExtension(ModelExtension):
         else:
             name = gettext("Roshta")
 
-        roshtat = BankRoshtat.create(
-            name=name,
-            message=message,
-            attachment=attachment,
-            notes=caption,
-        )
+        # Build the create-form defaults instead of creating the row. `message`
+        # is hidden but still saved (it enforces one-row-per-message once the
+        # agent saves); the image is a serialized dict that round-trips to the
+        # SAME attachment on save.
+        default_fields = {
+            'name': name,
+            'message': message,
+            'attachment': _serialize_attachment_for_form(attachment),
+            'notes': caption,
+        }
 
-        # Open the freshly created row's form in a slideover (edit mode).
-        return _open_roshtat(roshtat, created=True)
+        # Open a BLANK create form (no id) pre-filled with the defaults. The agent
+        # reviews/edits and must SAVE to actually store the prescription — no
+        # auto-create.
+        return {
+            'status': True,
+            'open_mode': 'slideover',
+            'message': gettext("Review the details and save to store the prescription."),
+            'data': {
+                'menu_item_key': 'drmagdy_main_menu_bank_roshtat',
+                'view_type': 'form',
+                # No 'id' -> the form opens in create mode.
+                'context': {'default_fields': default_fields},
+                'type': 'action',
+                'title': gettext("New Prescription"),
+            },
+        }
