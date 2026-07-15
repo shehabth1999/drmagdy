@@ -6,6 +6,7 @@ from django.utils.translation import gettext
 from modules.base.model_inheritance import ModelExtension
 from modules.base.decorators import action
 from modules.base.fields import AttachmentForeignKeyField
+from modules.base.middleware import get_current_user
 
 
 # Cache the resolved "New" ticket-stage id for a day. Stages are company-scoped
@@ -243,11 +244,12 @@ class MessageExtension(ModelExtension):
             # Assign the auto-created lead to the agent who ran the action (the
             # onchange that would set partner.sales_agent does NOT fire on a
             # backend create, so assigned_to would otherwise be null).
-            # `self.env.user` (queryset env, thread-local context) is the
-            # authenticated user or None, independent of the message — a plain
-            # truthiness check is enough.
-            if self.env.user:
-                lead_vals['assigned_to'] = self.env.user
+            # `get_current_user()` reads the thread-local request context (what
+            # env.user resolves to) — record-independent and works regardless of
+            # the queryset class. Returns the authenticated user or None.
+            current_user = get_current_user()
+            if current_user:
+                lead_vals['assigned_to'] = current_user
 
             lead = Lead.create(**lead_vals)
 
@@ -373,11 +375,12 @@ class MessageExtension(ModelExtension):
             default_fields['phone'] = partner.phone or partner.mobile or ''
 
         # Pre-assign to the agent who triggered the action, so the saved ticket
-        # lands on their plate instead of unassigned. `self.env.user` is the
-        # authenticated user or None (thread-local context, not tied to the
-        # message), so a plain truthiness check is enough.
-        if self.env.user:
-            default_fields['assigned_to'] = self.env.user
+        # lands on their plate instead of unassigned. `get_current_user()` reads
+        # the thread-local request context (what env.user resolves to) —
+        # record-independent and works regardless of the queryset class.
+        current_user = get_current_user()
+        if current_user:
+            default_fields['assigned_to'] = current_user
 
         if message.type == 'text':
             text = ''
