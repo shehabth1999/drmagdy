@@ -43,7 +43,8 @@ ticket_form_drmagdy_supervisor_patch = {
             "target": "field[name=email]",
             "content": {
                 "name": "files",
-                "widget": "image",
+                "widget": "files",
+                "multiSelect": False,
                 "string": _("Files"),
                 "required": False,
                 "readonly": False,

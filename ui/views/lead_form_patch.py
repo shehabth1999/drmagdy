@@ -27,7 +27,8 @@ lead_form_drmagdy_receipt_patch = {
             "target": "field[name=assigned_to]",
             "content": {
                 "name": "payment_receipt",
-                "widget": "image",
+                "widget": "files",
+                "multiSelect": False,
                 "string": _("Payment Receipt"),
                 "required": False,
                 "readonly": True,
