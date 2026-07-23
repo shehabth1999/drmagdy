@@ -5,7 +5,7 @@ drmagdy Module - Support Ticket Form View Patch.
 Injects two fields into the support ticket form view
 (key: ``support_supportticket_form_view``):
   - ``supervisor`` (FK to ``base.user``) after ``assigned_to``.
-  - ``files`` (single image) after ``email``.
+  - ``files`` (multiple images, M2M) after ``email``.
 
 Both fields are injected into the ``support.ticket`` model by
 ``TicketExtension`` in ``drmagdy/extensions.py``.
@@ -49,11 +49,12 @@ ticket_form_drmagdy_supervisor_patch = {
             "content": {
                 "name": "files",
                 "widget": "files",
-                "multiSelect": False,
+                "multiSelect": True,
+                "accept": "image/*",
                 "string": _("Files"),
                 "required": False,
                 "readonly": False,
-                "help": _("Image attached to this ticket"),
+                "help": _("Images attached to this ticket"),
             },
         },
         # Menu-type action: opens the SendTicketImageAction wizard (slideover)
@@ -78,7 +79,14 @@ ticket_form_drmagdy_supervisor_patch = {
                     # Managers + admins only (admins imply managers; superusers
                     # bypass). Enforced server-side too, in the @action handler.
                     "allowed_groups": ["support.managers"],
-                    "invisible": {"field": "files", "operator": "is_null"},
+                    # Hide when the ticket has no images. `files` is an M2M so an
+                    # empty value serializes as [] (not null): is_null alone won't
+                    # match. String([]) === "" in JS, so eq "" hides on an empty
+                    # array; the is_null branch also covers a null value.
+                    "invisible": {"or": [
+                        {"field": "files", "operator": "is_null"},
+                        {"field": "files", "operator": "eq", "value": ""},
+                    ]},
                 },
             ],
         },

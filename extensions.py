@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.translation import gettext
 from modules.base.model_inheritance import ModelExtension
 from modules.base.decorators import action, onchange
-from modules.base.fields import AttachmentForeignKeyField
+from modules.base.fields import AttachmentForeignKeyField, AttachmentManyToManyField
 from modules.base.middleware import get_current_user
 
 
@@ -100,15 +100,18 @@ class TicketExtension(ModelExtension):
         help_text=_("Supervisor responsible for this ticket"),
     )
 
-    # Single image attached to the ticket (e.g. a photo of the requested medicine
-    # / prescription copied from a chat message). Custom attachment field — NOT a
-    # raw ForeignKey to base.Attachment.
-    files = AttachmentForeignKeyField(
+    # Images attached to the ticket (e.g. photos of the requested medicine /
+    # prescription copied from chat messages). Custom attachment M2M — NOT a
+    # raw M2M to base.Attachment. Was an AttachmentForeignKeyField (single)
+    # until 2026-07-23; existing files_id values were migrated into the M2M
+    # join table when the schema change was applied.
+    files = AttachmentManyToManyField(
         upload_to='support/tickets/files',
         allowed_types=['image'],
         related_name='ticket_files',
+        blank=True,
         verbose_name=_("Files"),
-        help_text=_("Image attached to this ticket (e.g. the requested medicine / prescription)"),
+        help_text=_("Images attached to this ticket (e.g. the requested medicine / prescription)"),
     )
 
     # The chat message this ticket was created from. OneToOne enforces "one
@@ -191,7 +194,9 @@ class TicketExtension(ModelExtension):
                 'data': {},
             }
 
-        if not record.files or not record.files.file:
+        # `files` is now an M2M — gather every attached image that has a file.
+        images = [a for a in record.files.all() if getattr(a, 'file', None)]
+        if not images:
             return {
                 'status': False,
                 'open_mode': 'message',
@@ -226,13 +231,18 @@ class TicketExtension(ModelExtension):
                 'data': {},
             }
 
-        # WhatsApp-safe absolute URL (JPEG-converts unsupported formats).
-        media_url = whatsapp_media_url(record.files, media_type='image')
-        if not media_url:
+        # Resolve each image to a WhatsApp-safe absolute URL once (JPEG-converts
+        # unsupported formats). Skip any that fail to produce a URL.
+        image_urls = []
+        for att in images:
+            url = whatsapp_media_url(att, media_type='image')
+            if url:
+                image_urls.append((att, url))
+        if not image_urls:
             return {
                 'status': False,
                 'open_mode': 'message',
-                'message': gettext("Could not build a public URL for the image."),
+                'message': gettext("Could not build a public URL for the ticket image(s)."),
                 'data': {},
             }
 
@@ -263,45 +273,51 @@ class TicketExtension(ModelExtension):
             else:
                 sender_partner = genie_partner or user_partner
 
-            # One MessageAttachment row per message (OneToOne), all pointing at
-            # the same stored file — no download/copy.
-            chat_attachment = MessageAttachment.from_base_attachment(
-                record.files, caption=caption or None,
-            )
+            # One outbound image message per attached image. The caption rides
+            # on the FIRST image only (WhatsApp album convention) so the text
+            # isn't repeated under every photo.
+            for idx, (att, media_url) in enumerate(image_urls):
+                msg_caption = caption if idx == 0 else ''
 
-            content = {
-                'attachment': {
-                    'id': str(chat_attachment.id),
-                    'filename': chat_attachment.file_name,
-                    'file_size': chat_attachment.file_size,
-                    'file_type': chat_attachment.file_type,
-                    'mime_type': chat_attachment.mime_type,
-                    'url': media_url,
-                    'download_status': chat_attachment.download_status,
-                },
-            }
-            if caption:
-                content['attachment']['caption'] = caption
-                content['caption'] = caption
+                # One MessageAttachment row per message (OneToOne), all pointing
+                # at the same stored file — no download/copy.
+                chat_attachment = MessageAttachment.from_base_attachment(
+                    att, caption=msg_caption or None,
+                )
 
-            # pre_create auto-sets direction='outbound' + social account fields;
-            # post_create fires account.handle_message → Celery WhatsApp send.
-            message = Message.objects.create(
-                conversation=conversation,
-                sender=sender_partner,
-                type='image',
-                content=content,
-            )
+                content = {
+                    'attachment': {
+                        'id': str(chat_attachment.id),
+                        'filename': chat_attachment.file_name,
+                        'file_size': chat_attachment.file_size,
+                        'file_type': chat_attachment.file_type,
+                        'mime_type': chat_attachment.mime_type,
+                        'url': media_url,
+                        'download_status': chat_attachment.download_status,
+                    },
+                }
+                if msg_caption:
+                    content['attachment']['caption'] = msg_caption
+                    content['caption'] = msg_caption
 
-            chat_attachment.message = message
-            chat_attachment.linked_to_message = True
-            chat_attachment.save(update_fields=['message', 'linked_to_message'])
+                # pre_create auto-sets direction='outbound' + social account
+                # fields; post_create fires account.handle_message → Celery send.
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=sender_partner,
+                    type='image',
+                    content=content,
+                )
 
-            # Push the new message over WebSocket so agents see it live.
-            try:
-                broadcaster._broadcast_message(conversation, message)
-            except Exception:  # noqa: BLE001 - broadcast failure must not block sending
-                pass
+                chat_attachment.message = message
+                chat_attachment.linked_to_message = True
+                chat_attachment.save(update_fields=['message', 'linked_to_message'])
+
+                # Push each new message over WebSocket so agents see it live.
+                try:
+                    broadcaster._broadcast_message(conversation, message)
+                except Exception:  # noqa: BLE001 - broadcast must not block sending
+                    pass
 
             sent += 1
 
@@ -316,7 +332,7 @@ class TicketExtension(ModelExtension):
                 'data': {},
             }
 
-        message_text = gettext("Image queued for %(sent)d customer(s).") % {'sent': sent}
+        message_text = gettext("%(imgs)d image(s) queued for %(sent)d customer(s).") % {'imgs': len(image_urls), 'sent': sent}
         if skipped_names:
             message_text += " " + gettext("Skipped (no conversation on this number): %(names)s.") % {'names': ', '.join(skipped_names)}
 
@@ -484,20 +500,22 @@ class MessageExtension(ModelExtension):
 
     @action
     def action_create_ticket_from_message(self):
-        """Single text/image message -> create a support ticket and open it in a
-        slideover for fast editing.
+        """One or more text/image messages -> create ONE support ticket and open
+        it in a slideover for fast editing.
 
-        - text message: the text becomes the ticket Description, with an
-          auto-generated Subject.
-        - image message: the image is copied into the ticket's `files` field
-          (via Attachment.from_chat_attachment), and the caption (if any) seeds
-          the Subject/Description.
+        `files` is an M2M, so selecting several image messages attaches ALL their
+        images to a single ticket. Behaviour:
+        - text message(s): their text is combined into the ticket Description.
+        - image message(s): each image is copied into a base Attachment (via
+          Attachment.from_chat_attachment) and added to the ticket's `files`;
+          any captions are folded into the Description.
+        - Subject seeds from the first text/caption, else the partner name.
         """
         from modules.base.models.attachment import Attachment
         from modules.support.models import Ticket, TicketStage
 
-        message = self.first()
-        if message is None:
+        messages = list(self)
+        if not messages:
             return {
                 'status': False,
                 'open_mode': 'message',
@@ -507,11 +525,11 @@ class MessageExtension(ModelExtension):
 
         # Guard: only text or image (the button schema enforces this too, but
         # never trust the client).
-        if message.type not in ('text', 'image'):
+        if any(m.type not in ('text', 'image') for m in messages):
             return {
                 'status': False,
                 'open_mode': 'message',
-                'message': gettext("This action only works on a single text or image message."),
+                'message': gettext("This action only works on text or image messages."),
                 'data': {},
             }
 
@@ -537,17 +555,21 @@ class MessageExtension(ModelExtension):
                 },
             }
 
-        # ONE TICKET PER MESSAGE. Look across ALL tickets (all_objects bypasses the
-        # branch/active manager filters) so we also catch a ticket that is closed
-        # or sits in another branch. If found, just re-open it — never duplicate.
-        existing = Ticket.all_objects.filter(source_message=message).first()
+        # ONE TICKET PER MESSAGE. If ANY selected message already has a ticket
+        # (all_objects bypasses branch/active filters so we also catch closed /
+        # other-branch tickets), just re-open it — never duplicate.
+        existing = Ticket.all_objects.filter(source_message__in=messages).first()
         if existing is not None:
             return _open_ticket(existing, created=False)
+
+        # All selected messages share one conversation, so derive branch /
+        # partner / stage context from the first message.
+        first = messages[0]
 
         # Ticket requires a branch (BranchMixin). The form auto-fills it from
         # env.branch on save, but resolve + guard here so the agent gets a
         # friendly message and the form is pre-filled with the right branch.
-        branch = getattr(message.env, 'branch', None)
+        branch = getattr(first.env, 'branch', None)
         if branch is None:
             return {
                 'status': False,
@@ -556,20 +578,20 @@ class MessageExtension(ModelExtension):
                 'data': {},
             }
 
-        partner = getattr(message.conversation, 'social_partner', None)
+        partner = getattr(first.conversation, 'social_partner', None)
 
         # New tickets should land in the "New" stage (cached for 1 day per
         # company). Resolve the Stage object so the relation field pre-fills with
         # a proper label; a stale/deleted id just yields None and is skipped.
-        stage_id = get_new_ticket_stage_id(message.env)
+        stage_id = get_new_ticket_stage_id(first.env)
         stage = TicketStage.objects.filter(pk=stage_id).first() if stage_id else None
 
         # Build the create-form defaults instead of creating the ticket. The
         # server-action layer turns model instances into {id, name} for relation
-        # widgets; the image is a serialized dict that round-trips to the SAME
-        # attachment on save. `source_message` is hidden but still saved (it
-        # enforces one-ticket-per-message once the agent saves).
-        default_fields = {'branch': branch, 'source_message': message}
+        # widgets; images are serialized dicts that round-trip to the SAME
+        # attachments on save. `source_message` (the FIRST message) is hidden but
+        # still saved (it enforces one-ticket-per-message once the agent saves).
+        default_fields = {'branch': branch, 'source_message': first}
         if stage is not None:
             default_fields['stage'] = stage
         if partner is not None:
@@ -585,33 +607,49 @@ class MessageExtension(ModelExtension):
         if current_user:
             default_fields['assigned_to'] = current_user
 
-        if message.type == 'text':
-            text = ''
-            if isinstance(message.content, dict):
-                text = (message.content.get('text') or '').strip()
-            default_fields['description'] = text
-            default_fields['name'] = text[:80].strip() or gettext("Out-of-stock request")
-        else:  # image
-            message_attachment = getattr(message, 'attachment', None)
-            if message_attachment is None or not getattr(getattr(message_attachment, 'file', None), 'name', None):
-                return {
-                    'status': False,
-                    'open_mode': 'message',
-                    'message': gettext("This image has no stored file to attach."),
-                    'data': {},
-                }
-            # Copy the chat image into a base Attachment (references the SAME file)
-            # and pre-fill the `files` widget with it.
-            attachment = Attachment.from_chat_attachment(message_attachment)
-            default_fields['files'] = _serialize_attachment_for_form(attachment)
-            caption = (getattr(message_attachment, 'caption', '') or '').strip()
-            default_fields['description'] = caption
-            if caption:
-                default_fields['name'] = caption[:80]
-            elif partner is not None:
-                default_fields['name'] = gettext("Request from %(n)s") % {'n': partner.name}
-            else:
-                default_fields['name'] = gettext("Out-of-stock request")
+        # Walk every selected message (in selection order): collect image
+        # attachments into the `files` M2M and text/captions into the Description.
+        files = []
+        text_parts = []
+        for m in messages:
+            if m.type == 'text':
+                text = ''
+                if isinstance(m.content, dict):
+                    text = (m.content.get('text') or '').strip()
+                if text:
+                    text_parts.append(text)
+            else:  # image
+                message_attachment = getattr(m, 'attachment', None)
+                if message_attachment is None or not getattr(getattr(message_attachment, 'file', None), 'name', None):
+                    # Skip an image with no stored file rather than failing the
+                    # whole batch.
+                    continue
+                attachment = Attachment.from_chat_attachment(message_attachment)
+                files.append(_serialize_attachment_for_form(attachment))
+                caption = (getattr(message_attachment, 'caption', '') or '').strip()
+                if caption:
+                    text_parts.append(caption)
+
+        if not files and not text_parts:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("The selected messages have no text or image to use."),
+                'data': {},
+            }
+
+        if files:
+            default_fields['files'] = files
+
+        # Description = combined text/captions; Subject = first text part, else
+        # partner name, else a sensible default.
+        default_fields['description'] = '\n\n'.join(text_parts).strip()
+        if text_parts:
+            default_fields['name'] = text_parts[0][:80]
+        elif partner is not None:
+            default_fields['name'] = gettext("Request from %(n)s") % {'n': partner.name}
+        else:
+            default_fields['name'] = gettext("Out-of-stock request")
 
         # Open a BLANK create form (no id) pre-filled with the defaults. The agent
         # reviews/edits and must SAVE to actually create the ticket — no

@@ -48,14 +48,11 @@ menu_dict = {
                     "variant": "primary",
                     "selection_required": True,
                     "confirm_required": False,
-                    # Show ONLY for a single text or image message. Hide when more
-                    # than one selected OR the message is neither text nor image.
-                    "invisible": {
-                        "or": [
-                            {"field": "_selected_count", "operator": "gt", "value": 1},
-                            {"field": "type", "operator": "not_in", "value": ["text", "image"]},
-                        ]
-                    },
+                    # One OR MANY text/image messages -> one ticket (images go
+                    # into the files M2M). The button hides if ANY selected
+                    # message makes invisible=true, so it hides only when a
+                    # non-text/image message is in the selection.
+                    "invisible": {"field": "type", "operator": "not_in", "value": ["text", "image"]},
                 },
             },
             {
