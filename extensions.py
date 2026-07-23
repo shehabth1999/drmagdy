@@ -163,7 +163,8 @@ class TicketExtension(ModelExtension):
         `content.attachment.url` + `content.caption`.
         """
         from django.contrib.contenttypes.models import ContentType
-        from modules.chat.models import Conversation, Message, MessageAttachment
+        from modules.base.models import Partner
+        from modules.chat.models import Conversation, ConversationMember, Message, MessageAttachment
         from modules.chat.services.message_sender_service import MessageSenderService
         from modules.whatsapp.utils.media import whatsapp_media_url
 
@@ -208,14 +209,20 @@ class TicketExtension(ModelExtension):
                 'data': {},
             }
 
-        # Outbound messages need a sender partner (required FK) — use the
-        # current user's linked partner.
-        sender_partner = getattr(user, 'partner', None)
-        if sender_partner is None:
+        # Outbound messages need a sender partner (required FK). Preferred
+        # sender: the user who runs the action. Per-conversation fallback: if
+        # that partner is not an active participant of the conversation, send
+        # as the Genie system partner instead (same partner the AI replies
+        # use) — see the loop below.
+        user_partner = getattr(user, 'partner', None)
+        genie_partner = Partner.all_objects.filter(
+            ai_agent=True, email="genie@genie-erp.com",
+        ).first()
+        if user_partner is None and genie_partner is None:
             return {
                 'status': False,
                 'open_mode': 'message',
-                'message': gettext("Your user has no linked partner to send as."),
+                'message': gettext("No sender available: your user has no linked partner and the Genie system partner is missing."),
                 'data': {},
             }
 
@@ -244,6 +251,17 @@ class TicketExtension(ModelExtension):
             if conversation is None:
                 skipped_names.append(partner.name or str(partner.pk))
                 continue
+
+            # Sender for THIS conversation: the action user if they are an
+            # active participant (soft-removed 'removed' rows don't count),
+            # otherwise the Genie system partner.
+            sender_partner = None
+            if user_partner is not None and ConversationMember.objects.filter(
+                conversation=conversation, user=user_partner,
+            ).exclude(role='removed').exists():
+                sender_partner = user_partner
+            else:
+                sender_partner = genie_partner or user_partner
 
             # One MessageAttachment row per message (OneToOne), all pointing at
             # the same stored file — no download/copy.
