@@ -250,8 +250,15 @@ class TicketExtension(ModelExtension):
         account_ct = ContentType.objects.get_for_model(type(account))
         broadcaster = MessageSenderService()
 
-        sent = 0
-        skipped_names = []
+        # Pre-flight: resolve EVERY selected customer's conversation on the
+        # chosen number BEFORE sending anything. A customer with no
+        # conversation on this number means the picker handed us something it
+        # should never have offered (its domain is meant to narrow the list to
+        # that number's customers). Refuse the whole send rather than deliver
+        # to the subset that happens to match — a partial send is invisible to
+        # the user and reads as "only the first customer got the message".
+        conversation_by_partner = {}
+        missing_names = []
         for partner in partners:
             conversation = Conversation.objects.filter(
                 social_account_content_type=account_ct,
@@ -259,8 +266,27 @@ class TicketExtension(ModelExtension):
                 social_partner=partner,
             ).first()
             if conversation is None:
-                skipped_names.append(partner.name or str(partner.pk))
-                continue
+                missing_names.append(partner.name or str(partner.pk))
+            else:
+                conversation_by_partner[partner.pk] = conversation
+
+        if missing_names:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext(
+                    "Nothing was sent. These customers have no conversation on %(number)s: %(names)s. "
+                    "Pick the number first — the customer list only shows customers of that number."
+                ) % {
+                    'number': account.phone_number or account.name,
+                    'names': ', '.join(missing_names),
+                },
+                'data': {},
+            }
+
+        sent = 0
+        for partner in partners:
+            conversation = conversation_by_partner[partner.pk]
 
             # Sender for THIS conversation: the action user if they are an
             # active participant (soft-removed 'removed' rows don't count),
@@ -321,20 +347,10 @@ class TicketExtension(ModelExtension):
 
             sent += 1
 
-        if sent == 0:
-            return {
-                'status': False,
-                'open_mode': 'message',
-                'message': gettext("No conversation on %(number)s for: %(names)s. Pick the number first — the customer list only shows customers of that number.") % {
-                    'number': account.phone_number or account.name,
-                    'names': ', '.join(skipped_names),
-                },
-                'data': {},
-            }
-
+        # The pre-flight above already rejected any customer we could not
+        # resolve, so every selected customer was sent to — `sent` always
+        # equals len(partners) here and there is nothing to report as skipped.
         message_text = gettext("%(imgs)d image(s) queued for %(sent)d customer(s).") % {'imgs': len(image_urls), 'sent': sent}
-        if skipped_names:
-            message_text += " " + gettext("Skipped (no conversation on this number): %(names)s.") % {'names': ', '.join(skipped_names)}
 
         return {
             'status': True,
