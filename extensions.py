@@ -4,7 +4,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import gettext
 from modules.base.model_inheritance import ModelExtension
-from modules.base.decorators import action
+from modules.base.decorators import action, onchange
 from modules.base.fields import AttachmentForeignKeyField
 from modules.base.middleware import get_current_user
 
@@ -123,6 +123,191 @@ class TicketExtension(ModelExtension):
         verbose_name=_("Source Message"),
         help_text=_("The chat message this ticket was created from (one ticket per message)."),
     )
+
+    @onchange('whatsapp_account')
+    def _onchange_wizard_whatsapp_account(self):
+        """Mirror of the Send-Ticket-Image wizard's number onchange, registered
+        on support.ticket.
+
+        Why here: the wizard opens as a menu-type action slideover, and the
+        frontend (MiniForm) posts onchange with the SELECTED records' model
+        (``support.ticket``) — its ``model`` prop takes priority over the
+        wizard view's model — so the registration on
+        ``drmagdy.sendticketimageaction`` is never hit from the UI. Tickets
+        have no ``whatsapp_account`` field, so this can ONLY fire from that
+        wizard form. The account id is read from the posted values via the
+        onchange proxy's ``_original_data`` (a Ticket instance can't hold it).
+
+        Effect in the wizard: clears the Customers (العملاء) field and narrows
+        its picker to customers of the selected number.
+        """
+        from .models import send_wizard_account_change_result
+
+        raw = getattr(self, '_original_data', {}).get('whatsapp_account')
+        account_id = raw.get('id') if isinstance(raw, dict) else raw
+        return send_wizard_account_change_result(account_id)
+
+    @action
+    def action_send_ticket_image_to_conversations(queryset, form):
+        """Send this ticket's image (``files``, with an optional caption) to the
+        WhatsApp conversations of the customers picked in the wizard.
+
+        Opened via the `type: "menu"` button on the ticket form view; `form` is
+        the saved ``drmagdy.SendTicketImageAction`` transient holding the wizard
+        input. For each selected customer we resolve their ONE conversation on
+        the selected WhatsApp number (unique per the chat
+        `unique_social_partner_account_combination` constraint), create a chat
+        MessageAttachment that references the SAME stored file (no copy), and
+        create the outbound Message — `Message.post_create` then queues the
+        actual WhatsApp send (`process_handling_message`) which reads
+        `content.attachment.url` + `content.caption`.
+        """
+        from django.contrib.contenttypes.models import ContentType
+        from modules.chat.models import Conversation, Message, MessageAttachment
+        from modules.chat.services.message_sender_service import MessageSenderService
+        from modules.whatsapp.utils.media import whatsapp_media_url
+
+        # Managers/admins only (admins imply support.managers). The button is
+        # also hidden via allowed_groups, but the UI is not a security layer —
+        # enforce here so a direct API call can't bypass it.
+        user = get_current_user()
+        if user is None or (
+            not user.is_superuser and not user.has_groups(['support.managers'])
+        ):
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("Only support managers can send ticket images to WhatsApp."),
+                'data': {},
+            }
+
+        record = queryset.first()
+        if record is None:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("No record selected."),
+                'data': {},
+            }
+
+        if not record.files or not record.files.file:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("This ticket has no image to send."),
+                'data': {},
+            }
+
+        account = form.whatsapp_account
+        partners = list(form.partners.all())
+        if not account or not partners:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("Select a WhatsApp number and at least one customer."),
+                'data': {},
+            }
+
+        # Outbound messages need a sender partner (required FK) — use the
+        # current user's linked partner.
+        sender_partner = getattr(user, 'partner', None)
+        if sender_partner is None:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("Your user has no linked partner to send as."),
+                'data': {},
+            }
+
+        # WhatsApp-safe absolute URL (JPEG-converts unsupported formats).
+        media_url = whatsapp_media_url(record.files, media_type='image')
+        if not media_url:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("Could not build a public URL for the image."),
+                'data': {},
+            }
+
+        caption = (form.message or '').strip()
+        account_ct = ContentType.objects.get_for_model(type(account))
+        broadcaster = MessageSenderService()
+
+        sent = 0
+        skipped_names = []
+        for partner in partners:
+            conversation = Conversation.objects.filter(
+                social_account_content_type=account_ct,
+                social_account_object_id=account.id,
+                social_partner=partner,
+            ).first()
+            if conversation is None:
+                skipped_names.append(partner.name or str(partner.pk))
+                continue
+
+            # One MessageAttachment row per message (OneToOne), all pointing at
+            # the same stored file — no download/copy.
+            chat_attachment = MessageAttachment.from_base_attachment(
+                record.files, caption=caption or None,
+            )
+
+            content = {
+                'attachment': {
+                    'id': str(chat_attachment.id),
+                    'filename': chat_attachment.file_name,
+                    'file_size': chat_attachment.file_size,
+                    'file_type': chat_attachment.file_type,
+                    'mime_type': chat_attachment.mime_type,
+                    'url': media_url,
+                    'download_status': chat_attachment.download_status,
+                },
+            }
+            if caption:
+                content['attachment']['caption'] = caption
+                content['caption'] = caption
+
+            # pre_create auto-sets direction='outbound' + social account fields;
+            # post_create fires account.handle_message → Celery WhatsApp send.
+            message = Message.objects.create(
+                conversation=conversation,
+                sender=sender_partner,
+                type='image',
+                content=content,
+            )
+
+            chat_attachment.message = message
+            chat_attachment.linked_to_message = True
+            chat_attachment.save(update_fields=['message', 'linked_to_message'])
+
+            # Push the new message over WebSocket so agents see it live.
+            try:
+                broadcaster._broadcast_message(conversation, message)
+            except Exception:  # noqa: BLE001 - broadcast failure must not block sending
+                pass
+
+            sent += 1
+
+        if sent == 0:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("No conversation on %(number)s for: %(names)s. Pick the number first — the customer list only shows customers of that number.") % {
+                    'number': account.phone_number or account.name,
+                    'names': ', '.join(skipped_names),
+                },
+                'data': {},
+            }
+
+        message_text = gettext("Image queued for %(sent)d customer(s).") % {'sent': sent}
+        if skipped_names:
+            message_text += " " + gettext("Skipped (no conversation on this number): %(names)s.") % {'names': ', '.join(skipped_names)}
+
+        return {
+            'status': True,
+            'open_mode': 'message',
+            'message': message_text,
+            'data': {},
+        }
 
 
 class LeadExtension(ModelExtension):

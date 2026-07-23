@@ -14,5 +14,5 @@ this is the drmagdy module
     'application': True,
     'installable': True,
     'auto_install': False,
-    'depends': ['base', 'support', 'crm', 'chat'],
+    'depends': ['base', 'support', 'crm', 'chat', 'whatsapp'],
 }

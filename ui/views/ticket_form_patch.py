@@ -9,6 +9,11 @@ Injects two fields into the support ticket form view
 
 Both fields are injected into the ``support.ticket`` model by
 ``TicketExtension`` in ``drmagdy/extensions.py``.
+
+Also appends the ``Send to WhatsApp`` header action button (menu-type): opens
+the ``drmagdy_send_ticket_image_form_view`` wizard (slideover) to send the
+ticket's image to WhatsApp conversations. Handler:
+``Ticket.action_send_ticket_image_to_conversations(queryset, form)``.
 """
 from django.utils.translation import gettext as _
 
@@ -50,6 +55,32 @@ ticket_form_drmagdy_supervisor_patch = {
                 "readonly": False,
                 "help": _("Image attached to this ticket"),
             },
+        },
+        # Menu-type action: opens the SendTicketImageAction wizard (slideover)
+        # to send this ticket's image to WhatsApp conversations. Handler:
+        # Ticket.action_send_ticket_image_to_conversations(queryset, form)
+        # (TicketExtension, drmagdy/extensions.py). Hidden when the ticket has
+        # no image.
+        {
+            "operation": "append",
+            "target": "header.actions",
+            "content": [
+                {
+                    "name": "action_send_ticket_image_to_conversations",
+                    "string": _("Send to WhatsApp"),
+                    "icon": "Send",
+                    "type": "menu",
+                    "as": "button",
+                    "variant": "success",
+                    "view_key": "drmagdy_send_ticket_image_form_view",
+                    "menu_type": "slideover",
+                    "view_type": ["form"],
+                    # Managers + admins only (admins imply managers; superusers
+                    # bypass). Enforced server-side too, in the @action handler.
+                    "allowed_groups": ["support.managers"],
+                    "invisible": {"field": "files", "operator": "is_null"},
+                },
+            ],
         },
     ],
 }
