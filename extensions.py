@@ -429,6 +429,46 @@ class TicketExtension(ModelExtension):
             'on_success': {'type': 'refresh'},
         }
 
+    # ------------------------------------------------------------------
+    # Chatter tracking. The core tracker reads ``_mail_track`` and accepts a
+    # CALLABLE (ThreadMixin._get_mail_track), which is the only way an
+    # extension can extend the tracked-field list: the extension system copies
+    # methods onto the model but not plain data attributes such as
+    # Ticket._mail_tracked_fields. Keeps the base fields and adds contact_status
+    # so the chatter shows who changed it and when.
+    # ------------------------------------------------------------------
+    def _mail_track(self):
+        return {'name': None, 'description': None, 'contact_status': None}
+
+    def _format_field_value(self, value, field):
+        """Show the human label of choice fields (e.g. contact_status) instead
+        of the stored key; everything else as the core tracker renders it."""
+        from modules.notifications.models.mixins import ThreadMixin
+
+        if value is None or value == '':
+            return gettext("empty")
+        choices = getattr(field, 'choices', None)
+        if choices:
+            for key, label in choices:
+                if key == value:
+                    return str(label)
+        return ThreadMixin._format_field_value(self, value, field)
+
+    def _format_tracking_message(self, changes):
+        """Arabic-friendly tracking line: who changed which field from what to what."""
+        user_name = self._get_current_user_display() or gettext("System")
+        if len(changes) == 1:
+            c = changes[0]
+            return gettext(
+                "<b>%(user)s</b> changed <b>%(field)s</b> from <em>%(old)s</em> to <em>%(new)s</em>"
+            ) % {'user': user_name, 'field': c['field_desc'], 'old': c['old_value'], 'new': c['new_value']}
+        body = gettext("<p><b>%(user)s</b> updated several fields:</p><ul>") % {'user': user_name}
+        for c in changes:
+            body += gettext("<li><b>%(field)s</b>: %(old)s → %(new)s</li>") % {
+                'field': c['field_desc'], 'old': c['old_value'], 'new': c['new_value'],
+            }
+        return body + "</ul>"
+
     @onchange('whatsapp_account')
     def _onchange_wizard_whatsapp_account(self):
         """Mirror of the Send-Ticket-Image wizard's number onchange, registered

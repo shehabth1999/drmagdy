@@ -663,3 +663,18 @@ msgstr "تم تخطي %(n)d عميل خارج نافذة الـ24 ساعة في 
 
 msgid "%(imgs)d image(s) queued for %(sent)d customer(s)."
 msgstr "تم إرسال %(imgs)d صورة إلى %(sent)d عميل."
+
+msgid "empty"
+msgstr "فارغ"
+
+msgid "System"
+msgstr "النظام"
+
+msgid "<b>%(user)s</b> changed <b>%(field)s</b> from <em>%(old)s</em> to <em>%(new)s</em>"
+msgstr "قام <b>%(user)s</b> بتغيير <b>%(field)s</b> من <em>%(old)s</em> إلى <em>%(new)s</em>"
+
+msgid "<p><b>%(user)s</b> updated several fields:</p><ul>"
+msgstr "<p>قام <b>%(user)s</b> بتحديث عدة حقول:</p><ul>"
+
+msgid "<li><b>%(field)s</b>: %(old)s → %(new)s</li>"
+msgstr "<li><b>%(field)s</b>: %(old)s ← %(new)s</li>"
