@@ -6,6 +6,7 @@ and ``extensions.py`` (fields injected into support.ticket) can import them
 without creating an import cycle.
 """
 from django.utils.translation import gettext_lazy as _
+from django.utils.translation import pgettext_lazy
 
 
 # Outcome of sales contacting the customer once the ordered item has arrived
@@ -27,10 +28,15 @@ CANCEL_MODE_CHOICES = [
 # recomputed on every save (and by the arrival reminder task) so the ribbon
 # reflects persisted truth. Precedence is decided in
 # ``extensions.compute_ribbon_state``.
+# Labels are deliberately ONE word (or two short ones): the ribbon is a small
+# diagonal strip and long text is clipped.
+# ``pgettext_lazy("ribbon", ...)``: generic msgids such as "Cancelled" exist in
+# other modules' catalogues, and Django's merged catalogue gives an extension
+# (last in INSTALLED_APPS) the lowest priority — the context keeps OUR words.
 RIBBON_CHOICES = [
-    ("cancelled", _("Cancelled")),
-    ("overdue", _("Item has not arrived yet")),
-    ("returned", _("Cancelled and returned")),
-    ("very_important", _("Obtain from anywhere")),
-    ("urgent", _("Urgent")),
+    ("cancelled", pgettext_lazy("ribbon", "Cancelled")),
+    ("overdue", pgettext_lazy("ribbon", "Overdue")),
+    ("returned", pgettext_lazy("ribbon", "Returned")),
+    ("very_important", pgettext_lazy("ribbon", "Very important")),
+    ("urgent", pgettext_lazy("ribbon", "Urgent")),
 ]

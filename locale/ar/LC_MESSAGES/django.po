@@ -254,7 +254,6 @@ msgstr "drmagdy"
 msgid "this is the drmagdy module"
 msgstr "هذه وحدة drmagdy"
 
-
 # ---------------------------------------------------------------------------
 # Items-under-order workflow (2026-09-14)
 # ---------------------------------------------------------------------------
@@ -279,16 +278,7 @@ msgid "Returned to the shelf"
 msgstr "هيتركن ع الرف لحد ما يجيله نصيبه (مرتجع)"
 
 msgid "Cancelled"
-msgstr "تم الالغاء"
-
-msgid "Item has not arrived yet"
-msgstr "لم يصل الصنف حتي الان"
-
-msgid "Cancelled and returned"
-msgstr "تم الالغاء و عمل مرتجع"
-
-msgid "Obtain from anywhere"
-msgstr "يرجي التصرف فيها من اي مكان للاهمية"
+msgstr "ملغي"
 
 msgid "Urgent"
 msgstr "مستعجل"
@@ -319,12 +309,6 @@ msgstr "يجب توفير الطلب من أي مصدر نظرًا لأهميت�
 
 msgid "When the ordered item should arrive"
 msgstr "موعد وصول الصنف المطلوب"
-
-msgid "Internal note"
-msgstr "ملاحظة داخلية"
-
-msgid "Internal note while the item is under order"
-msgstr "ملاحظة داخلية أثناء وجود الصنف تحت الطلب"
 
 msgid "Result of contacting the customer once the item arrived"
 msgstr "نتيجة التواصل مع العميل بعد وصول الصنف"
@@ -611,23 +595,11 @@ msgstr "الشريط"
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Cancelled"
-msgstr "تم الالغاء"
+msgstr "ملغي"
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Returned"
 msgstr "مرتجع"
-
-msgctxt "ui/views/ticket_form_patch.py"
-msgid "Internal note"
-msgstr "ملاحظة داخلية"
-
-msgctxt "ui/views/ticket_form_patch.py"
-msgid "Internal note for the purchasing team..."
-msgstr "ملاحظة داخلية لفريق المشتريات..."
-
-msgctxt "ui/views/ticket_form_patch.py"
-msgid "Internal note while the item is under order"
-msgstr "ملاحظة داخلية أثناء وجود الصنف تحت الطلب"
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Cancellation / Return"
@@ -656,3 +628,29 @@ msgstr "إرسال إلى واتساب"
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Cancel Order"
 msgstr "إلغاء الطلب"
+
+msgid "Overdue"
+msgstr "متأخر"
+
+msgid "Very important"
+msgstr "مهم جدًا"
+
+msgctxt "ribbon"
+msgid "Cancelled"
+msgstr "ملغي"
+
+msgctxt "ribbon"
+msgid "Overdue"
+msgstr "متأخر"
+
+msgctxt "ribbon"
+msgid "Returned"
+msgstr "مرتجع"
+
+msgctxt "ribbon"
+msgid "Very important"
+msgstr "مهم جدًا"
+
+msgctxt "ribbon"
+msgid "Urgent"
+msgstr "مستعجل"

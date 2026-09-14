@@ -35,7 +35,6 @@ from django.utils.translation import gettext as _
 from drmagdy.ticket_stages import (
     ARRIVED,
     PROCESSED,
-    UNDER_ORDER,
     any_of,
     not_stage_cond,
     stage_leaves,
@@ -311,23 +310,6 @@ DRMAGDY_TICKET_SHEET = {
                         {"name": "ribbon_state", "string": _("Ribbon"), "widget": "select", "invisible": True, "readonly": True},
                         {"name": "is_cancelled", "string": _("Cancelled"), "widget": "switch", "invisible": True, "readonly": True},
                         {"name": "is_returned", "string": _("Returned"), "widget": "switch", "invisible": True, "readonly": True},
-                    ]
-                },
-                {
-                    "fullWidth": True,
-                    "fields": [
-                        {
-                            "name": "internal_note",
-                            "string": _("Internal note"),
-                            "widget": "textarea",
-                            "rows": 4,
-                            "required": False,
-                            # Appears from "اصناف تحت الطلب" onwards; editable only there.
-                            "invisible": not_stage_cond(UNDER_ORDER, ARRIVED, PROCESSED),
-                            "readonly": any_of(*stage_leaves([ARRIVED, PROCESSED], "in"), IS_CANCELLED),
-                            "placeholder": _("Internal note for the purchasing team..."),
-                            "help": _("Internal note while the item is under order"),
-                        },
                     ]
                 },
             ],

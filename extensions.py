@@ -154,7 +154,7 @@ def _cancel_note(mode, reason, old_stage_name, user):
 class TicketExtension(ModelExtension):
     """drmagdy additions to support.Ticket: supervisor, images, chat source
     message, and the pharmacy "items under order" workflow (buyer, urgency,
-    supplier code, expected arrival + reminder, internal note, contact status,
+    supplier code, expected arrival + reminder, contact status,
     cancel / return, ribbon)."""
 
     _inherit = 'support.ticket'
@@ -231,12 +231,6 @@ class TicketExtension(ModelExtension):
         blank=True,
         verbose_name=_("Expected arrival"),
         help_text=_("When the ordered item should arrive"),
-    )
-    internal_note = models.TextField(
-        null=True,
-        blank=True,
-        verbose_name=_("Internal note"),
-        help_text=_("Internal note while the item is under order"),
     )
     contact_status = models.CharField(
         max_length=32,

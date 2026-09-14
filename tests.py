@@ -57,7 +57,7 @@ class TicketFormPatchTests(SimpleTestCase):
         self.assertEqual(result["sheet"]["ribbon"]["field_text"], "ribbon_state")
         names = _field_names(result["sheet"])
         for expected in ("name", "team", "supervisor", "files", "buyer", "supplier_code",
-                         "expected_arrival_at", "contact_status", "internal_note", "ribbon_state"):
+                         "expected_arrival_at", "contact_status", "ribbon_state"):
             self.assertIn(expected, names)
         actions = {a["name"] for a in result["header"]["actions"]}
         self.assertEqual(actions, {"action_send_ticket_image_to_conversations", "action_cancel_ticket"})
