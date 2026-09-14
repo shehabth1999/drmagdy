@@ -11,9 +11,9 @@ saves the transient record and calls
 
 Two outcomes, chosen in ``mode``:
   - cancel_keep   → ticket closes into "تمت المعالجة", flagged cancelled.
-  - cancel_return → return to supplier (مرتجع شراء صنف): ticket closes into
-                    "تمت المعالجة", flagged returned, category set to the
-                    purchase-return category.
+  - cancel_return → return to supplier (مرتجع شراء صنف): the SAME ticket
+                    restarts in "جديد", flagged returned, category set
+                    automatically to the purchase-return category.
 """
 from django.utils.translation import gettext as _
 
@@ -41,7 +41,7 @@ cancel_ticket_form_view = {
                                     "widget": "select",
                                     "required": True,
                                     "defaultValue": "cancel_keep",
-                                    "help": _("Keep it (ticket closes as cancelled) or return it to the supplier (ticket closes as a purchase return)."),
+                                    "help": _("Keep it (ticket closes as cancelled) or return it to the supplier (same ticket restarts as new with the purchase-return category)."),
                                 },
                                 {
                                     "name": "reason",

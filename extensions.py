@@ -177,7 +177,7 @@ def _cancel_note(mode, reason, old_stage_name, user):
     if mode == 'cancel_keep':
         head = gettext("Order cancelled — item kept; ticket closed.")
     else:
-        head = gettext("Order cancelled — item returned to the supplier (purchase return); ticket closed.")
+        head = gettext("Order returned to the supplier (purchase return) — ticket restarted as new.")
     parts = [
         head,
         gettext("Previous stage: %(stage)s") % {'stage': old_stage_name},
@@ -373,10 +373,11 @@ class TicketExtension(ModelExtension):
         ``form.mode``:
           * ``cancel_keep``   → keep the item: ticket closes into "تمت المعالجة"
                                  and is flagged cancelled.
-          * ``cancel_return`` → return to supplier (مرتجع شراء صنف): ticket closes
-                                 into "تمت المعالجة", flagged returned, and its
-                                 category becomes the purchase-return category
-                                 when one exists (customer decision, 2026-09-14).
+          * ``cancel_return`` → return to supplier (مرتجع شراء صنف): the SAME
+                                 ticket restarts in "جديد", flagged returned, and
+                                 its category is set automatically to the
+                                 purchase-return category when one exists
+                                 (customer decision, 2026-09-14).
         Both post an internal chatter note. Stage rules are bypassed for these
         programmatic moves.
         """
@@ -399,7 +400,8 @@ class TicketExtension(ModelExtension):
                 continue
 
             company_id = getattr(getattr(ticket, 'branch', None), 'company_id', None)
-            target_role = st.PROCESSED  # both outcomes close the ticket
+            # keep → close; return to supplier → the SAME ticket restarts as new
+            target_role = st.PROCESSED if mode == 'cancel_keep' else st.NEW
             target_stage_id = st.stage_id(target_role, company_id)
             if not target_stage_id:
                 return {
@@ -423,9 +425,9 @@ class TicketExtension(ModelExtension):
             else:
                 ticket.is_returned = True
                 ticket.return_count = (ticket.return_count or 0) + 1
-                ticket.stage_id = target_stage_id
-                ticket.closed_at = now
-                category = _purchase_return_category(company_id)
+                ticket.stage_id = target_stage_id      # back to "جديد"
+                ticket.closed_at = None
+                category = _purchase_return_category(company_id)   # auto "🔄 مرتجع شراء صنف"
                 if category is not None:
                     ticket.category = category
                     ticket.category_description = category.description or ''
