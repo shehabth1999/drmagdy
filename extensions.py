@@ -110,6 +110,29 @@ def _aware(value):
     return value
 
 
+def _whatsapp_window_closed(conversation):
+    """True when WhatsApp would refuse a free-form message in this conversation.
+
+    WhatsApp only accepts non-template messages (images included) within 24 hours
+    of the customer's last INBOUND message (error 131047 "re-engagement message").
+    Reuses the core check from modules.chat.tasks; falls back to the same query.
+    """
+    try:
+        from modules.chat.tasks import _whatsapp_window_closed as core_check
+
+        return core_check(conversation)
+    except Exception:  # pragma: no cover - core helper moved
+        from datetime import timedelta
+
+        from modules.chat.models import Message
+
+        last_in = (
+            Message.objects.filter(conversation=conversation, direction='inbound')
+            .order_by('-created_at').values_list('created_at', flat=True).first()
+        )
+        return not last_in or (timezone.now() - last_in) > timedelta(hours=24)
+
+
 def compute_ribbon_state(ticket, now=None, company_id=None):
     """Value of ``Ticket.ribbon_state`` for the form ribbon.
 
@@ -563,8 +586,30 @@ class TicketExtension(ModelExtension):
                 'data': {},
             }
 
-        sent = 0
+        # WhatsApp refuses free-form messages (images included) to a customer who
+        # has not written to this number in the last 24 hours (error 131047).
+        # The refusal arrives asynchronously, so without this check the wizard
+        # reported "queued" while the customer silently never received the
+        # image. Skip those customers and name them in the result.
+        closed_names, open_partners = [], []
         for partner in partners:
+            if _whatsapp_window_closed(conversation_by_partner[partner.pk]):
+                closed_names.append(partner.name or str(partner.pk))
+            else:
+                open_partners.append(partner)
+        if not open_partners:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext(
+                    "Nothing was sent: WhatsApp only accepts messages to customers who wrote to this "
+                    "number within the last 24 hours. Outside the window: %(names)s"
+                ) % {'names': ', '.join(closed_names)},
+                'data': {},
+            }
+
+        sent = 0
+        for partner in open_partners:
             conversation = conversation_by_partner[partner.pk]
 
             # Sender for THIS conversation: the action user if they are an
@@ -626,10 +671,12 @@ class TicketExtension(ModelExtension):
 
             sent += 1
 
-        # The pre-flight above already rejected any customer we could not
-        # resolve, so every selected customer was sent to — `sent` always
-        # equals len(partners) here and there is nothing to report as skipped.
         message_text = gettext("%(imgs)d image(s) queued for %(sent)d customer(s).") % {'imgs': len(image_urls), 'sent': sent}
+        if closed_names:
+            message_text += " " + gettext(
+                "Skipped %(n)d customer(s) outside the 24-hour WhatsApp window "
+                "(no message from them in the last 24h): %(names)s"
+            ) % {'n': len(closed_names), 'names': ', '.join(closed_names)}
 
         return {
             'status': True,

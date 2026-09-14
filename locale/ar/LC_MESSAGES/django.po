@@ -654,3 +654,12 @@ msgstr "مهم جدًا"
 msgctxt "ribbon"
 msgid "Urgent"
 msgstr "مستعجل"
+
+msgid "Nothing was sent: WhatsApp only accepts messages to customers who wrote to this number within the last 24 hours. Outside the window: %(names)s"
+msgstr "لم يتم الإرسال: واتساب يقبل الرسائل فقط للعملاء الذين راسلوا هذا الرقم خلال آخر 24 ساعة. خارج النافذة: %(names)s"
+
+msgid "Skipped %(n)d customer(s) outside the 24-hour WhatsApp window (no message from them in the last 24h): %(names)s"
+msgstr "تم تخطي %(n)d عميل خارج نافذة الـ24 ساعة في واتساب (لم يراسلونا خلال آخر 24 ساعة): %(names)s"
+
+msgid "%(imgs)d image(s) queued for %(sent)d customer(s)."
+msgstr "تم إرسال %(imgs)d صورة إلى %(sent)d عميل."

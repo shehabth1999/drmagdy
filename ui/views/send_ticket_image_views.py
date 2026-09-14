@@ -16,6 +16,32 @@ conversation on that number, shown by their name → optional caption message.
 from django.utils.translation import gettext as _
 
 
+def _default_whatsapp_account():
+    """Default number for the wizard: the account named "Admin Pharmacy".
+
+    Resolved by NAME when the view is synced (the dict is stored in the DB), so a
+    re-created account row still matches; returns None (no default) when it does
+    not exist so the wizard keeps working. Re-run ``sync_ui_views`` after
+    renaming or re-creating the account.
+    """
+    try:
+        from django.apps import apps
+
+        WhatsAppAccount = apps.get_model("whatsapp", "whatsappaccount")
+        row = (
+            WhatsAppAccount.objects.filter(active=True, name__icontains="Admin Pharmacy")
+            .order_by("id")
+            .values("id", "name")
+            .first()
+        )
+        return {"id": row["id"], "name": row["name"].strip()} if row else None
+    except Exception:  # pragma: no cover - table missing / early import
+        return None
+
+
+_DEFAULT_ACCOUNT = _default_whatsapp_account()
+
+
 send_ticket_image_form_view = {
     "key": "drmagdy_send_ticket_image_form_view",
     "name": _("Send Ticket Image"),
@@ -40,6 +66,9 @@ send_ticket_image_form_view = {
                                     "multiSelect": False,
                                     "required": True,
                                     "onChange": True,
+                                    # Pre-selected number (see _default_whatsapp_account);
+                                    # the Customers picker is filtered by it from the start.
+                                    **({"defaultValue": _DEFAULT_ACCOUNT} if _DEFAULT_ACCOUNT else {}),
                                     "help": _("The WhatsApp account (number) to send from."),
                                     "domain": {
                                         "filters": {
