@@ -139,3 +139,14 @@ class TransitionRuleTests(TestCase):
         ticket.save()
         ticket.refresh_from_db()
         self.assertIsNotNone(ticket.closed_at)
+
+    def test_naive_expected_arrival_from_form_is_accepted(self):
+        """The browser posts datetimes without a timezone; comparing them with
+        timezone.now() used to raise "can't compare offset-naive and offset-aware
+        datetimes" inside compute_ribbon_state."""
+        import datetime
+        ticket = self._make_ticket()
+        ticket.expected_arrival_at = datetime.datetime(2030, 1, 1, 10, 0)  # naive
+        ticket.save()
+        ticket.refresh_from_db()
+        self.assertTrue(timezone.is_aware(ticket.expected_arrival_at))

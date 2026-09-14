@@ -93,6 +93,23 @@ def _serialize_attachment_for_form(attachment):
     }
 
 
+def _aware(value):
+    """Return ``value`` as a timezone-aware datetime.
+
+    A form save delivers ``expected_arrival_at`` as the browser sent it, i.e. a
+    naive datetime in the site's timezone; ``timezone.now()`` is aware, and
+    Python refuses to ORDER a naive and an aware datetime ("can't compare
+    offset-naive and offset-aware datetimes"). Django would make the value
+    aware on its way to the database anyway, so do the same here before any
+    comparison. Non-datetimes (None, dates) pass through untouched.
+    """
+    if value is None or not hasattr(value, 'tzinfo'):
+        return value
+    if timezone.is_naive(value):
+        return timezone.make_aware(value, timezone.get_current_timezone())
+    return value
+
+
 def compute_ribbon_state(ticket, now=None, company_id=None):
     """Value of ``Ticket.ribbon_state`` for the form ribbon.
 
@@ -105,7 +122,7 @@ def compute_ribbon_state(ticket, now=None, company_id=None):
     now = now or timezone.now()
     if getattr(ticket, 'is_cancelled', False):
         return 'cancelled'
-    arrival = getattr(ticket, 'expected_arrival_at', None)
+    arrival = _aware(getattr(ticket, 'expected_arrival_at', None))
     if arrival and arrival <= now and st.role_of(ticket.stage_id, company_id) == st.UNDER_ORDER:
         return 'overdue'
     if getattr(ticket, 'is_returned', False):
@@ -272,6 +289,10 @@ class TicketExtension(ModelExtension):
         (frontend ``required`` is boolean-only anyway).
         """
         now = timezone.now()
+        # Normalise a naive datetime coming from the form so every comparison
+        # below (and the DB write) sees an aware value.
+        if self.expected_arrival_at is not None:
+            self.expected_arrival_at = _aware(self.expected_arrival_at)
         old = None
         if self.pk:
             old = type(self)._base_manager.filter(pk=self.pk).values('stage_id', 'expected_arrival_at').first()
