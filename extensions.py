@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
+import logging
+
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import gettext
 from modules.base.model_inheritance import ModelExtension
 from modules.base.decorators import action, onchange
 from modules.base.fields import AttachmentForeignKeyField, AttachmentManyToManyField
 from modules.base.middleware import get_current_user
+
+from . import ticket_stages as st
+from .choices import CANCEL_MODE_CHOICES, CONTACT_STATUS_CHOICES, RIBBON_CHOICES
+
+logger = logging.getLogger(__name__)
 
 
 # Cache the resolved "New" ticket-stage id for a day. Stages are company-scoped
@@ -84,8 +93,52 @@ def _serialize_attachment_for_form(attachment):
     }
 
 
+def compute_ribbon_state(ticket, now=None, company_id=None):
+    """Value of ``Ticket.ribbon_state`` for the form ribbon.
+
+    Precedence (first match wins): cancelled > overdue > returned >
+    very_important > urgent > nothing. "Overdue" means the expected arrival
+    time has passed while the ticket is still in "اصناف تحت الطلب". Called from
+    ``TicketExtension.pre_save`` on every save and from the arrival reminder
+    task (which flips a ticket to overdue at its due time).
+    """
+    now = now or timezone.now()
+    if getattr(ticket, 'is_cancelled', False):
+        return 'cancelled'
+    arrival = getattr(ticket, 'expected_arrival_at', None)
+    if arrival and arrival <= now and st.role_of(ticket.stage_id, company_id) == st.UNDER_ORDER:
+        return 'overdue'
+    if getattr(ticket, 'is_returned', False):
+        return 'returned'
+    if getattr(ticket, 'is_very_important', False):
+        return 'very_important'
+    if getattr(ticket, 'is_urgent', False):
+        return 'urgent'
+    return None
+
+
+def _cancel_note(mode, reason, old_stage_name, user):
+    """HTML chatter note recording what the cancel wizard did."""
+    who = getattr(user, 'name', None) or getattr(user, 'email', None) or '-'
+    if mode == 'cancel_keep':
+        head = gettext("Order cancelled — item kept; ticket closed.")
+    else:
+        head = gettext("Order returned to the shelf — ticket restarted as new and marked returned.")
+    parts = [
+        head,
+        gettext("Previous stage: %(stage)s") % {'stage': old_stage_name},
+        gettext("By: %(user)s") % {'user': who},
+    ]
+    if reason:
+        parts.append(gettext("Reason: %(reason)s") % {'reason': reason})
+    return "<br/>".join(parts)
+
+
 class TicketExtension(ModelExtension):
-    """Add a supervisor field to support.Ticket via the drmagdy extension module."""
+    """drmagdy additions to support.Ticket: supervisor, images, chat source
+    message, and the pharmacy "items under order" workflow (buyer, urgency,
+    supplier code, expected arrival + reminder, internal note, contact status,
+    cancel / return, ribbon)."""
 
     _inherit = 'support.ticket'
     _depends = ['support', 'chat']
@@ -126,6 +179,217 @@ class TicketExtension(ModelExtension):
         verbose_name=_("Source Message"),
         help_text=_("The chat message this ticket was created from (one ticket per message)."),
     )
+
+    # ------------------------------------------------------------------
+    # Items-under-order workflow (2026-09-14). All columns nullable or
+    # defaulted so sync_schema adds them to the populated table in place.
+    # ------------------------------------------------------------------
+    buyer = models.ForeignKey(
+        'base.user',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='drmagdy_bought_tickets',
+        verbose_name=_("Buyer"),
+        help_text=_("User who buys the ordered item"),
+    )
+    is_urgent = models.BooleanField(
+        default=False,
+        verbose_name=_("Urgent"),
+        help_text=_("Off = normal (عادي), on = urgent (مستعجل)"),
+    )
+    is_very_important = models.BooleanField(
+        default=False,
+        verbose_name=_("Very important — obtain from anywhere"),
+        help_text=_("The order must be obtained from any source because of its importance"),
+    )
+    supplier_code = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        verbose_name=_("Supplier code"),
+    )
+    expected_arrival_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Expected arrival"),
+        help_text=_("When the ordered item should arrive"),
+    )
+    internal_note = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name=_("Internal note"),
+        help_text=_("Internal note while the item is under order"),
+    )
+    contact_status = models.CharField(
+        max_length=32,
+        choices=CONTACT_STATUS_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name=_("Contact status"),
+        help_text=_("Result of contacting the customer once the item arrived"),
+    )
+    is_cancelled = models.BooleanField(default=False, verbose_name=_("Cancelled"))
+    is_returned = models.BooleanField(default=False, verbose_name=_("Returned"))
+    cancel_mode = models.CharField(
+        max_length=16,
+        choices=CANCEL_MODE_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name=_("Cancel outcome"),
+    )
+    cancel_reason = models.TextField(null=True, blank=True, verbose_name=_("Cancel reason"))
+    cancelled_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Cancelled / returned on"))
+    return_count = models.IntegerField(default=0, verbose_name=_("Times returned"))
+    ribbon_state = models.CharField(
+        max_length=20,
+        choices=RIBBON_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name=_("Ribbon"),
+    )
+    # Stamped by drmagdy.tasks.notify_due_ticket_arrivals after the one-time
+    # alert; cleared in pre_save when the date changes or the ticket re-enters
+    # "اصناف تحت الطلب" (re-arm).
+    arrival_notified_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Arrival alert sent on"))
+
+    def _is_blank(self, field_name):
+        attname = f"{field_name}_id"
+        value = getattr(self, attname) if hasattr(self, attname) else getattr(self, field_name, None)
+        return value is None or (isinstance(value, str) and not value.strip())
+
+    def _rearm_arrival_reminder(self):
+        self.arrival_notified_at = None
+
+    def pre_save(self):
+        """Stage-transition rules, closed_at bookkeeping, reminder re-arming and
+        ribbon state.
+
+        Chained by the extension system AFTER the model's own hooks — never call
+        super() here. Runs for form saves, the status pill and kanban drags
+        (all go through ``Ticket.save()``); ``@onchange`` does not, which is why
+        the "required in stage X" rules live here and not in the view schema
+        (frontend ``required`` is boolean-only anyway).
+        """
+        now = timezone.now()
+        old = None
+        if self.pk:
+            old = type(self)._base_manager.filter(pk=self.pk).values('stage_id', 'expected_arrival_at').first()
+        old_stage_id = old['stage_id'] if old else None
+        company_id = getattr(getattr(self, 'branch', None), 'company_id', None)
+        stage_changed = self.stage_id != old_stage_id
+
+        if (
+            st.ENFORCE_STAGE_RULES
+            and stage_changed
+            and self.stage_id
+            and not getattr(self, '_skip_stage_rules', False)
+        ):
+            new_role = st.role_of(self.stage_id, company_id)
+            rule = st.TRANSITION_RULES.get(new_role) or {}
+            required = dict(rule.get('required', {}))
+            required.update(rule.get('required_from', {}).get(st.role_of(old_stage_id, company_id), {}))
+            missing = [str(label) for name, label in required.items() if self._is_blank(name)]
+            if missing:
+                raise ValidationError(
+                    gettext('Cannot move the ticket to "%(stage)s" before filling: %(fields)s') % {
+                        'stage': self.stage.name,
+                        'fields': '، '.join(missing),
+                    }
+                )
+
+        if stage_changed:
+            new_role = st.role_of(self.stage_id, company_id)
+            old_role = st.role_of(old_stage_id, company_id)
+            if new_role in st.CLOSED:
+                if not self.closed_at:
+                    self.closed_at = now
+            elif old_role in st.CLOSED:
+                self.closed_at = None
+            if new_role == st.UNDER_ORDER:
+                self._rearm_arrival_reminder()
+
+        if old is None or old['expected_arrival_at'] != self.expected_arrival_at:
+            self._rearm_arrival_reminder()
+
+        self.ribbon_state = compute_ribbon_state(self, now, company_id)
+
+    @action
+    def action_cancel_ticket(queryset, form):
+        """Cancel wizard handler (``drmagdy_cancel_ticket_form_view``).
+
+        ``form.mode``:
+          * ``cancel_keep``   → keep the item: ticket closes into "تمت المعالجة"
+                                 and is flagged cancelled.
+          * ``cancel_return`` → item back on the shelf: the SAME ticket restarts
+                                 in "جديد", flagged returned; every other field
+                                 is kept (customer decision, 2026-09-14).
+        Both post an internal chatter note. Stage rules are bypassed for these
+        programmatic moves.
+        """
+        user = get_current_user()
+        mode = getattr(form, 'mode', None)
+        if mode not in dict(CANCEL_MODE_CHOICES):
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext("Please choose what happens to the item."),
+                'data': {},
+            }
+        reason = (getattr(form, 'reason', '') or '').strip()
+        now = timezone.now()
+        done, skipped = 0, []
+
+        for ticket in queryset:
+            if ticket.is_cancelled:
+                skipped.append(f"#{ticket.id}")
+                continue
+
+            company_id = getattr(getattr(ticket, 'branch', None), 'company_id', None)
+            target_role = st.PROCESSED if mode == 'cancel_keep' else st.NEW
+            target_stage_id = st.stage_id(target_role, company_id)
+            if not target_stage_id:
+                return {
+                    'status': False,
+                    'open_mode': 'message',
+                    'message': gettext('Ticket stage "%(stage)s" was not found; nothing was changed.') % {
+                        'stage': st.STAGE_NAMES[target_role],
+                    },
+                    'data': {},
+                }
+
+            old_stage_name = ticket.stage.name if ticket.stage_id else '-'
+            ticket._skip_stage_rules = True
+            ticket.cancel_mode = mode
+            ticket.cancel_reason = reason or None
+            ticket.cancelled_at = now
+            if mode == 'cancel_keep':
+                ticket.is_cancelled = True
+                ticket.stage_id = target_stage_id
+                ticket.closed_at = now
+            else:
+                ticket.is_returned = True
+                ticket.return_count = (ticket.return_count or 0) + 1
+                ticket.stage_id = target_stage_id
+                ticket.closed_at = None
+            ticket.save()  # full save → pre_save recomputes ribbon / bookkeeping
+
+            try:
+                ticket.message_post(body=_cancel_note(mode, reason, old_stage_name, user), message_type='note')
+            except Exception:  # noqa: BLE001 - chatter is best effort
+                logger.exception("drmagdy: cancel note failed for ticket #%s", ticket.pk)
+            done += 1
+
+        message = gettext("%(n)d ticket(s) processed.") % {'n': done}
+        if skipped:
+            message += " " + gettext("Already cancelled: %(ids)s") % {'ids': ', '.join(skipped)}
+        return {
+            'status': True,
+            'open_mode': 'message',
+            'message': message,
+            'data': {},
+            'on_success': {'type': 'refresh'},
+        }
 
     @onchange('whatsapp_account')
     def _onchange_wizard_whatsapp_account(self):

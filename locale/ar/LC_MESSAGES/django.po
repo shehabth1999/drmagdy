@@ -254,3 +254,405 @@ msgstr "drmagdy"
 msgid "this is the drmagdy module"
 msgstr "هذه وحدة drmagdy"
 
+
+# ---------------------------------------------------------------------------
+# Items-under-order workflow (2026-09-14)
+# ---------------------------------------------------------------------------
+
+# choices.py / model fields / messages (module-wide)
+msgid "No answer"
+msgstr "لا يرد"
+
+msgid "Contacted, awaiting reply"
+msgstr "تم التواصل مع العميل ومنتظرين الرد"
+
+msgid "Contacted, will pick up"
+msgstr "تم التواصل هيعدي ياخدها"
+
+msgid "Delivered"
+msgstr "تم التسليم"
+
+msgid "Cancelled, keep the item"
+msgstr "تم الالغاء بس نسيبه هينفعنا"
+
+msgid "Returned to the shelf"
+msgstr "هيتركن ع الرف لحد ما يجيله نصيبه (مرتجع)"
+
+msgid "Cancelled"
+msgstr "تم الالغاء"
+
+msgid "Item has not arrived yet"
+msgstr "لم يصل الصنف حتي الان"
+
+msgid "Cancelled and returned"
+msgstr "تم الالغاء و عمل مرتجع"
+
+msgid "Obtain from anywhere"
+msgstr "يرجي التصرف فيها من اي مكان للاهمية"
+
+msgid "Urgent"
+msgstr "مستعجل"
+
+msgid "Buyer"
+msgstr "المشتري"
+
+msgid "Expected arrival"
+msgstr "موعد الوصول المتوقع"
+
+msgid "Supplier code"
+msgstr "كود المورد"
+
+msgid "Contact status"
+msgstr "حالة التواصل مع العميل"
+
+msgid "User who buys the ordered item"
+msgstr "المستخدم الذي يشتري الصنف المطلوب"
+
+msgid "Off = normal (عادي), on = urgent (مستعجل)"
+msgstr "مغلق = عادي، مفعّل = مستعجل"
+
+msgid "Very important — obtain from anywhere"
+msgstr "مهم جدًا — يرجي التصرف فيها من اي مكان"
+
+msgid "The order must be obtained from any source because of its importance"
+msgstr "يجب توفير الطلب من أي مصدر نظرًا لأهميته"
+
+msgid "When the ordered item should arrive"
+msgstr "موعد وصول الصنف المطلوب"
+
+msgid "Internal note"
+msgstr "ملاحظة داخلية"
+
+msgid "Internal note while the item is under order"
+msgstr "ملاحظة داخلية أثناء وجود الصنف تحت الطلب"
+
+msgid "Result of contacting the customer once the item arrived"
+msgstr "نتيجة التواصل مع العميل بعد وصول الصنف"
+
+msgid "Returned"
+msgstr "مرتجع"
+
+msgid "Cancel outcome"
+msgstr "نتيجة الإلغاء"
+
+msgid "Cancel reason"
+msgstr "سبب الإلغاء"
+
+msgid "Cancelled / returned on"
+msgstr "تاريخ الإلغاء / الإرجاع"
+
+msgid "Times returned"
+msgstr "عدد مرات الإرجاع"
+
+msgid "Ribbon"
+msgstr "الشريط"
+
+msgid "Arrival alert sent on"
+msgstr "تاريخ إرسال تنبيه الوصول"
+
+msgid "Cannot move the ticket to \"%(stage)s\" before filling: %(fields)s"
+msgstr "لا يمكن نقل التذكرة إلى «%(stage)s» قبل تعبئة: %(fields)s"
+
+msgid "Order cancelled — item kept; ticket closed."
+msgstr "تم إلغاء الطلب — تم الاحتفاظ بالصنف وإغلاق التذكرة."
+
+msgid "Order returned to the shelf — ticket restarted as new and marked returned."
+msgstr "تم إرجاع الصنف إلى الرف — أُعيد فتح التذكرة كجديدة وتم تمييزها كمرتجع."
+
+msgid "Previous stage: %(stage)s"
+msgstr "المرحلة السابقة: %(stage)s"
+
+msgid "By: %(user)s"
+msgstr "بواسطة: %(user)s"
+
+msgid "Reason: %(reason)s"
+msgstr "السبب: %(reason)s"
+
+msgid "Please choose what happens to the item."
+msgstr "يرجى اختيار ما سيحدث للصنف."
+
+msgid "Ticket stage \"%(stage)s\" was not found; nothing was changed."
+msgstr "لم يتم العثور على مرحلة التذكرة «%(stage)s»؛ لم يتم تغيير أي شيء."
+
+msgid "%(n)d ticket(s) processed."
+msgstr "تمت معالجة %(n)d تذكرة."
+
+msgid "Already cancelled: %(ids)s"
+msgstr "ملغاة بالفعل: %(ids)s"
+
+msgid "Cancel Ticket"
+msgstr "إلغاء التذكرة"
+
+msgid "What happens to the item?"
+msgstr "ماذا سيحدث للصنف؟"
+
+msgid "Reason"
+msgstr "السبب"
+
+msgid "Optional reason, saved in the ticket chatter."
+msgstr "سبب اختياري، يُحفظ في محادثة التذكرة."
+
+msgid "Cancel Order"
+msgstr "إلغاء الطلب"
+
+msgid "Send to WhatsApp"
+msgstr "إرسال إلى واتساب"
+
+# ui/views/cancel_ticket_views.py
+msgctxt "ui/views/cancel_ticket_views.py"
+msgid "Cancel Order"
+msgstr "إلغاء الطلب"
+
+msgctxt "ui/views/cancel_ticket_views.py"
+msgid "What happens to the item?"
+msgstr "ماذا سيحدث للصنف؟"
+
+msgctxt "ui/views/cancel_ticket_views.py"
+msgid "Keep it (ticket closes as cancelled) or return it to the shelf (same ticket restarts as new, marked returned)."
+msgstr "الاحتفاظ به (تُغلق التذكرة كملغاة) أو إرجاعه إلى الرف (تُعاد نفس التذكرة كجديدة مع تمييزها كمرتجع)."
+
+msgctxt "ui/views/cancel_ticket_views.py"
+msgid "Reason"
+msgstr "السبب"
+
+msgctxt "ui/views/cancel_ticket_views.py"
+msgid "Optional reason, saved in the ticket chatter..."
+msgstr "سبب اختياري، يُحفظ في محادثة التذكرة..."
+
+# ui/views/ticket_form_patch.py — base labels (copied from the support module's
+# catalogue so the restated sheet keeps its Arabic) + the new order fields
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Ticket Subject"
+msgstr "موضوع التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Brief summary of the support issue"
+msgstr "ملخص موجز لمشكلة الدعم"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Enter ticket subject"
+msgstr "أدخل موضوع التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Support Team"
+msgstr "فريق الدعم"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Team responsible for this ticket"
+msgstr "الفريق المسؤول عن هذه التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Search..."
+msgstr "بحث..."
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Assigned To"
+msgstr "مُعيّن إلى"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "User assigned to handle this ticket"
+msgstr "المستخدم المعيّن للتعامل مع هذه التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Customer"
+msgstr "العميل"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Customer who submitted this ticket"
+msgstr "العميل الذي أرسل هذه التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Phone"
+msgstr "الهاتف"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "phone of custmer"
+msgstr "هاتف العميل"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Enter phone number"
+msgstr "أدخل رقم الهاتف"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "customer Email"
+msgstr "بريد العميل"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Email address of the customer person"
+msgstr "عنوان البريد الإلكتروني للعميل"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Enter customer email"
+msgstr "أدخل بريد العميل"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Images attached to this ticket"
+msgstr "صور مرفقة بهذه التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Category"
+msgstr "الفئة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Category of the ticket"
+msgstr "فئة التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Priority"
+msgstr "الأولوية"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Priority level of the ticket"
+msgstr "مستوى أولوية التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Tags"
+msgstr "الوسوم"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Tags for categorizing this ticket"
+msgstr "وسوم لتصنيف هذه التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Add tags..."
+msgstr "إضافة وسوم..."
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Created On"
+msgstr "تاريخ الإنشاء"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Date and time when this ticket was created"
+msgstr "تاريخ ووقت إنشاء هذه التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Closed On"
+msgstr "أُغلقت في"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Date and time when this ticket was closed"
+msgstr "تاريخ ووقت إغلاق هذه التذكرة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Category Description"
+msgstr "وصف الفئة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Description of the selected category"
+msgstr "وصف الفئة المحددة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Note"
+msgstr "ملاحظة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Enter Notes here"
+msgstr "أدخل الملاحظات هنا"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Order Details"
+msgstr "بيانات الطلب"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Buyer"
+msgstr "المشتري"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Who buys this order..."
+msgstr "من سيشتري هذا الطلب..."
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Mandatory before moving the ticket to \"اصناف تحت الطلب\""
+msgstr "مطلوب قبل نقل التذكرة إلى «اصناف تحت الطلب»"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Supplier code"
+msgstr "كود المورد"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Enter supplier code"
+msgstr "أدخل كود المورد"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Expected arrival"
+msgstr "موعد الوصول المتوقع"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "When the ordered item should arrive. Mandatory before moving to \"اصناف تحت الطلب\"; online users are alerted once it passes while the ticket is still there."
+msgstr "موعد وصول الصنف المطلوب. مطلوب قبل النقل إلى «اصناف تحت الطلب»؛ يتم تنبيه المستخدمين المتصلين عند تجاوزه والتذكرة ما زالت هناك."
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Urgent"
+msgstr "مستعجل"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Off = normal (عادي), on = urgent (مستعجل)"
+msgstr "مغلق = عادي، مفعّل = مستعجل"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Very important — obtain from anywhere"
+msgstr "مهم جدًا — يرجي التصرف فيها من اي مكان"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "The order must be obtained from any source because of its importance"
+msgstr "يجب توفير الطلب من أي مصدر نظرًا لأهميته"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Contact status"
+msgstr "حالة التواصل مع العميل"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Result of contacting the customer. Mandatory before closing from \"اصناف وصلت\""
+msgstr "نتيجة التواصل مع العميل. مطلوب قبل الإغلاق من «اصناف وصلت»"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Ribbon"
+msgstr "الشريط"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Cancelled"
+msgstr "تم الالغاء"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Returned"
+msgstr "مرتجع"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Internal note"
+msgstr "ملاحظة داخلية"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Internal note for the purchasing team..."
+msgstr "ملاحظة داخلية لفريق المشتريات..."
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Internal note while the item is under order"
+msgstr "ملاحظة داخلية أثناء وجود الصنف تحت الطلب"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Cancellation / Return"
+msgstr "الإلغاء / الإرجاع"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Outcome"
+msgstr "النتيجة"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Cancelled / returned on"
+msgstr "تاريخ الإلغاء / الإرجاع"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Times returned"
+msgstr "عدد مرات الإرجاع"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Reason"
+msgstr "السبب"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Send to WhatsApp"
+msgstr "إرسال إلى واتساب"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Cancel Order"
+msgstr "إلغاء الطلب"

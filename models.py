@@ -9,6 +9,8 @@ from modules.base.models.mixins import TransientModel
 from modules.base.fields import AttachmentForeignKeyField
 from modules.base.decorators import action, onchange
 
+from .choices import CANCEL_MODE_CHOICES
+
 
 class BankRoshtat(BaseModel):
     """A bank of prescription ("roshta") images captured from chat.
@@ -198,3 +200,27 @@ class SendTicketImageAction(TransientModel):
         clear stale selections. See ``send_wizard_account_change_result``.
         """
         return send_wizard_account_change_result(self.whatsapp_account_id)
+
+
+class CancelTicketAction(TransientModel):
+    """Wizard input for ``Ticket.action_cancel_ticket`` (TicketExtension in
+    ``extensions.py``). Opened by the "Cancel Order" button on the ticket form
+    (view ``drmagdy_cancel_ticket_form_view``). Transient: expires after ~1h and
+    is swept by the daily cleanup task.
+    """
+
+    class Meta:
+        verbose_name = _("Cancel Ticket")
+
+    mode = models.CharField(
+        max_length=16,
+        choices=CANCEL_MODE_CHOICES,
+        default='cancel_keep',
+        verbose_name=_("What happens to the item?"),
+    )
+    reason = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("Reason"),
+        help_text=_("Optional reason, saved in the ticket chatter."),
+    )
