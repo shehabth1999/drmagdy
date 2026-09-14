@@ -678,3 +678,9 @@ msgstr "<p>قام <b>%(user)s</b> بتحديث عدة حقول:</p><ul>"
 
 msgid "<li><b>%(field)s</b>: %(old)s → %(new)s</li>"
 msgstr "<li><b>%(field)s</b>: %(old)s ← %(new)s</li>"
+
+msgid "<b>%(user)s</b> sent %(imgs)d image(s) of this ticket via WhatsApp (%(number)s) to %(sent)d customer(s)."
+msgstr "أرسل <b>%(user)s</b> %(imgs)d صورة من هذه التذكرة عبر واتساب (%(number)s) إلى %(sent)d عميل."
+
+msgid "%(n)d customer(s) skipped (outside the 24-hour window)."
+msgstr "تم تخطي %(n)d عميل (خارج نافذة الـ24 ساعة)."

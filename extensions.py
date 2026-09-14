@@ -739,6 +739,19 @@ class TicketExtension(ModelExtension):
                 "(no message from them in the last 24h): %(names)s"
             ) % {'n': len(closed_names), 'names': ', '.join(closed_names)}
 
+        # Small audit note in the ticket chatter: who sent, how many, on which
+        # number. Deliberately WITHOUT customer names (customer request).
+        try:
+            who = getattr(user, 'name', None) or getattr(user, 'email', None) or '-'
+            note = gettext(
+                "<b>%(user)s</b> sent %(imgs)d image(s) of this ticket via WhatsApp (%(number)s) to %(sent)d customer(s)."
+            ) % {'user': who, 'imgs': len(image_urls), 'number': account.name.strip() if account.name else (account.phone_number or '-'), 'sent': sent}
+            if closed_names:
+                note += " " + gettext("%(n)d customer(s) skipped (outside the 24-hour window).") % {'n': len(closed_names)}
+            record.message_post(body=note, message_type='note')
+        except Exception:  # noqa: BLE001 - chatter is best effort
+            logger.exception("drmagdy: WhatsApp send note failed for ticket #%s", record.pk)
+
         return {
             'status': True,
             'open_mode': 'message',
