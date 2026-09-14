@@ -157,13 +157,27 @@ def compute_ribbon_state(ticket, now=None, company_id=None):
     return None
 
 
+def _purchase_return_category(company_id=None):
+    """The support category used for purchase returns ("🔄 مرتجع شراء صنف").
+
+    Resolved by name so a re-created row still matches; ``None`` when the
+    pharmacy has no such category (the cancel then leaves the category as is).
+    """
+    from modules.support.models import TicketCategory
+
+    qs = TicketCategory.all_objects.all()
+    if company_id:
+        qs = qs.filter(company_id=company_id)
+    return qs.filter(name__icontains="مرتجع شراء").order_by("id").first()
+
+
 def _cancel_note(mode, reason, old_stage_name, user):
     """HTML chatter note recording what the cancel wizard did."""
     who = getattr(user, 'name', None) or getattr(user, 'email', None) or '-'
     if mode == 'cancel_keep':
         head = gettext("Order cancelled — item kept; ticket closed.")
     else:
-        head = gettext("Order returned to the shelf — ticket restarted as new and marked returned.")
+        head = gettext("Order cancelled — item returned to the supplier (purchase return); ticket closed.")
     parts = [
         head,
         gettext("Previous stage: %(stage)s") % {'stage': old_stage_name},
@@ -359,9 +373,10 @@ class TicketExtension(ModelExtension):
         ``form.mode``:
           * ``cancel_keep``   → keep the item: ticket closes into "تمت المعالجة"
                                  and is flagged cancelled.
-          * ``cancel_return`` → item back on the shelf: the SAME ticket restarts
-                                 in "جديد", flagged returned; every other field
-                                 is kept (customer decision, 2026-09-14).
+          * ``cancel_return`` → return to supplier (مرتجع شراء صنف): ticket closes
+                                 into "تمت المعالجة", flagged returned, and its
+                                 category becomes the purchase-return category
+                                 when one exists (customer decision, 2026-09-14).
         Both post an internal chatter note. Stage rules are bypassed for these
         programmatic moves.
         """
@@ -384,7 +399,7 @@ class TicketExtension(ModelExtension):
                 continue
 
             company_id = getattr(getattr(ticket, 'branch', None), 'company_id', None)
-            target_role = st.PROCESSED if mode == 'cancel_keep' else st.NEW
+            target_role = st.PROCESSED  # both outcomes close the ticket
             target_stage_id = st.stage_id(target_role, company_id)
             if not target_stage_id:
                 return {
@@ -409,7 +424,11 @@ class TicketExtension(ModelExtension):
                 ticket.is_returned = True
                 ticket.return_count = (ticket.return_count or 0) + 1
                 ticket.stage_id = target_stage_id
-                ticket.closed_at = None
+                ticket.closed_at = now
+                category = _purchase_return_category(company_id)
+                if category is not None:
+                    ticket.category = category
+                    ticket.category_description = category.description or ''
             ticket.save()  # full save → pre_save recomputes ribbon / bookkeeping
 
             try:

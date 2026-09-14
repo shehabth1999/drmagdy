@@ -21,7 +21,7 @@ CONTACT_STATUS_CHOICES = [
 # What the cancel wizard does with the ordered item.
 CANCEL_MODE_CHOICES = [
     ("cancel_keep", _("Cancelled, keep the item")),
-    ("cancel_return", _("Returned to the shelf")),
+    ("cancel_return", _("Return to supplier")),
 ]
 
 # Value shown on the form ribbon. Stored on the ticket (``ribbon_state``) and

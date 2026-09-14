@@ -274,8 +274,8 @@ msgstr "تم التسليم"
 msgid "Cancelled, keep the item"
 msgstr "تم الالغاء بس نسيبه هينفعنا"
 
-msgid "Returned to the shelf"
-msgstr "هيتركن ع الرف لحد ما يجيله نصيبه (مرتجع)"
+msgid "Return to supplier"
+msgstr "مرتجع شراء صنف"
 
 msgid "Cancelled"
 msgstr "ملغي"
@@ -340,8 +340,8 @@ msgstr "لا يمكن نقل التذكرة إلى «%(stage)s» قبل تعبئ
 msgid "Order cancelled — item kept; ticket closed."
 msgstr "تم إلغاء الطلب — تم الاحتفاظ بالصنف وإغلاق التذكرة."
 
-msgid "Order returned to the shelf — ticket restarted as new and marked returned."
-msgstr "تم إرجاع الصنف إلى الرف — أُعيد فتح التذكرة كجديدة وتم تمييزها كمرتجع."
+msgid "Order cancelled — item returned to the supplier (purchase return); ticket closed."
+msgstr "تم إلغاء الطلب — تم إرجاع الصنف إلى المورد (مرتجع شراء صنف) وإغلاق التذكرة."
 
 msgid "Previous stage: %(stage)s"
 msgstr "المرحلة السابقة: %(stage)s"
@@ -392,8 +392,8 @@ msgid "What happens to the item?"
 msgstr "ماذا سيحدث للصنف؟"
 
 msgctxt "ui/views/cancel_ticket_views.py"
-msgid "Keep it (ticket closes as cancelled) or return it to the shelf (same ticket restarts as new, marked returned)."
-msgstr "الاحتفاظ به (تُغلق التذكرة كملغاة) أو إرجاعه إلى الرف (تُعاد نفس التذكرة كجديدة مع تمييزها كمرتجع)."
+msgid "Keep it (ticket closes as cancelled) or return it to the supplier (ticket closes as a purchase return)."
+msgstr "الاحتفاظ به (تُغلق التذكرة كملغاة) أو إرجاعه إلى المورد (تُغلق التذكرة كمرتجع شراء صنف)."
 
 msgctxt "ui/views/cancel_ticket_views.py"
 msgid "Reason"
