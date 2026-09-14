@@ -389,6 +389,86 @@ DRMAGDY_TICKET_SHEET = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Translations for PATCH content.
+# The view registry pre-translates strings into {lang: text} dicts at sync time,
+# but only for a view's ``body`` (view_registry.py: ``_expand_translations`` is
+# applied to ``view_dict_copy['body']``), never for ``inheritance_operations``.
+# Patched labels would therefore reach the browser in English. We run the same
+# expansion here, with the same key set, lookup chain (pgettext with this file
+# as context → module gettext → Django catalogue → source) and language list.
+# ---------------------------------------------------------------------------
+import gettext as _gettext_module
+from pathlib import Path as _Path
+
+from django.conf import settings as _settings
+
+try:
+    from modules.base.registry.i18n_utils import VIEW_TRANSLATABLE_KEYS as _KEYS, catalog_gettext as _catalog_gettext
+except Exception:  # pragma: no cover - keep the patch importable if core moves
+    _KEYS = frozenset({"string", "placeholder", "help", "title", "label", "confirm_message"})
+
+    def _catalog_gettext(lang, message):
+        return message
+
+_SOURCE_FILE = "ui/views/ticket_form_patch.py"
+_LOCALE_DIR = _Path(__file__).resolve().parents[2] / "locale"
+
+
+def _languages():
+    """Same source as ViewRegistry.languages: active, translatable Language rows."""
+    try:
+        from modules.base.models.country import Language
+
+        langs = list(Language.objects.filter(active=True, translatable=True).values_list("iso_code", flat=True))
+        if langs:
+            return langs
+    except Exception:  # pragma: no cover - table missing during early migrations
+        pass
+    return [code for code, _name in getattr(_settings, "LANGUAGES", (("en", "English"),))]
+
+
+def _translators(langs):
+    out = {}
+    for lang in langs:
+        try:
+            out[lang] = _gettext_module.translation("django", localedir=str(_LOCALE_DIR), languages=[lang])
+        except FileNotFoundError:
+            out[lang] = None
+    return out
+
+
+def _expand_translations(node, langs, translators):
+    if isinstance(node, dict):
+        result = {}
+        for k, v in node.items():
+            if k in _KEYS and isinstance(v, str) and v:
+                translations = {}
+                for lang in langs:
+                    translated = None
+                    module_t = translators.get(lang)
+                    if module_t:
+                        t = module_t.pgettext(_SOURCE_FILE, v)
+                        if t and t != v:
+                            translated = t
+                        if not translated:
+                            t = module_t.gettext(v)
+                            if t and t != v:
+                                translated = t
+                    if not translated:
+                        t = _catalog_gettext(lang, v)
+                        if t and t != v:
+                            translated = t
+                    translations[lang] = translated or v
+                result[k] = translations
+            else:
+                result[k] = _expand_translations(v, langs, translators)
+        return result
+    if isinstance(node, list):
+        return [_expand_translations(item, langs, translators) for item in node]
+    return node
+
+
 ticket_form_drmagdy_patch = {
     "key": "ticket_form_drmagdy_patch",
     "name": "Support Ticket Form - drmagdy items under order",
@@ -462,3 +542,9 @@ ticket_form_drmagdy_patch = {
         },
     ],
 }
+
+# Pre-translate every label in the operations (see the block above).
+_langs = _languages()
+ticket_form_drmagdy_patch["inheritance_operations"] = _expand_translations(
+    ticket_form_drmagdy_patch["inheritance_operations"], _langs, _translators(_langs)
+)
