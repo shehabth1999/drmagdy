@@ -9,8 +9,16 @@ Patches the support ticket kanban card (parent key:
     on late tickets: the ``badge`` widget skips an off flag
     (``project/web/src/widgets/kanban/components/widgets/index.tsx``,
     ``utils/values.ts`` ``isEmptyValue``);
-  - the ``category`` relation as the ticket **Type** (after ``assigned_to``);
-  - ``created_at`` upgraded from the date-only ``date`` widget to ``datetime``;
+  - a FIXED card structure, one kind of item per block, so every card lines
+    up the same way (the header is a label-less flow-wrap: with five items of
+    different widths every card broke the line somewhere else and the date or
+    the category landed wherever there was room — 2026-09-24 complaint):
+      header  : Late badge · priority stars · assignee chip   (state + who)
+      body    : Category · <chip>                             (labelled row)
+      footer  : created date + time, label hidden             (always last)
+    ``body`` / ``footer`` are added to the card with a ``modify`` on the
+    direct path ``kanban.card`` (dict update), ``created_at`` is removed
+    from the header. ``created_at`` shows date + time (``datetime`` widget);
   - **late tickets first** in every column, then newest first:
     ``body.kanban.order_by`` is the board's default card order
     (``modules/base/views/kanban_paginated_view.py``); a sort picked in the
@@ -60,26 +68,46 @@ ticket_kanban_drmagdy_patch = {
             },
         },
         {
-            # Ticket "Type" = category. Relation widget mirrors how assigned_to
-            # renders on the card; readonly since the card is a quick glance.
-            "operation": "after",
-            "target": "field[name=assigned_to]",
-            "content": {
-                "name": "category",
-                "tag": "field",
-                "widget": "relation",
-                "displayField": "name",
-                "multiSelect": False,
-                "required": False,
-                "readonly": True,
-                "string": _("Category"),
-            },
+            # The date leaves the header flow (it moves to the footer below).
+            "operation": "remove",
+            "target": "field[name=created_at]",
         },
         {
-            # created_at should show date + time, not just the date.
+            # Body + footer blocks (the base card has header only). Ticket
+            # "Type" = category, a labelled row of its own; the created
+            # date + time always last, label hidden — a timestamp reads as a
+            # footer line, not as a value to compare.
             "operation": "modify",
-            "target": "field[name=created_at]",
-            "content": {"widget": "datetime"},
+            "target": "kanban.card",
+            "content": {
+                "body": {
+                    "fields": [
+                        {
+                            "name": "category",
+                            "tag": "field",
+                            "widget": "relation",
+                            "displayField": "name",
+                            "multiSelect": False,
+                            "required": False,
+                            "readonly": True,
+                            "string": _("Category"),
+                        },
+                    ],
+                },
+                "footer": {
+                    "left": [
+                        {
+                            "name": "created_at",
+                            "tag": "field",
+                            "widget": "datetime",
+                            "required": False,
+                            "readonly": True,
+                            "hideLabel": True,
+                            "string": _("Created On"),
+                        },
+                    ],
+                },
+            },
         },
         {
             # Late tickets first in every column, then the model's own order

@@ -134,14 +134,23 @@ class TicketKanbanPatchTests(SimpleTestCase):
         body = copy.deepcopy(support_ticket_kanban_view["body"])
         return UIView()._apply_inheritance_operations(body, patch["inheritance_operations"])
 
-    def test_late_badge_leads_the_header_fields(self):
+    def test_card_structure_is_fixed(self):
+        """header = Late badge, stars, assignee; body = category row;
+        footer = created date (label hidden). Every card lines up the same."""
         result = self._apply()
-        fields = result["kanban"]["card"]["header"]["fields"]
+        card = result["kanban"]["card"]
+        fields = card["header"]["fields"]
         self.assertEqual(fields[0]["name"], "is_late")
         self.assertEqual(fields[0]["widget"], "badge")
         self.assertEqual(fields[0]["color"], "danger")
-        names = [f["name"] for f in fields]
-        self.assertEqual(names, ["is_late", "priority", "assigned_to", "category", "created_at"])
+        self.assertEqual([f["name"] for f in fields], ["is_late", "priority", "assigned_to"])
+        self.assertEqual([f["name"] for f in card["body"]["fields"]], ["category"])
+        footer = card["footer"]["left"]
+        self.assertEqual([f["name"] for f in footer], ["created_at"])
+        self.assertEqual(footer[0]["widget"], "datetime")
+        self.assertTrue(footer[0]["hideLabel"])
+        self.assertIn("header", card)               # profile (title / customer) untouched
+        self.assertEqual(card["header"]["profile"]["title"]["name"], "name")
 
     def test_late_first_is_the_board_default_order(self):
         result = self._apply()
