@@ -62,6 +62,7 @@ ticket_kanban_drmagdy_patch = {
                 "tag": "field",
                 "widget": "badge",
                 "color": "danger",
+                "icon": "Clock",
                 "readonly": True,
                 "required": False,
                 "string": _("Late"),
