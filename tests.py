@@ -135,15 +135,15 @@ class TicketKanbanPatchTests(SimpleTestCase):
         return UIView()._apply_inheritance_operations(body, patch["inheritance_operations"])
 
     def test_card_structure_is_fixed(self):
-        """header = Late badge, stars, assignee; body = category row;
+        """header = stars, assignee, Late badge (last); body = category row;
         footer = created date (label hidden). Every card lines up the same."""
         result = self._apply()
         card = result["kanban"]["card"]
         fields = card["header"]["fields"]
-        self.assertEqual(fields[0]["name"], "is_late")
-        self.assertEqual(fields[0]["widget"], "badge")
-        self.assertEqual(fields[0]["color"], "danger")
-        self.assertEqual([f["name"] for f in fields], ["is_late", "priority", "assigned_to"])
+        self.assertEqual([f["name"] for f in fields], ["priority", "assigned_to", "is_late"])
+        badge = fields[-1]
+        self.assertEqual(badge["widget"], "badge")
+        self.assertEqual(badge["color"], "danger")
         self.assertEqual([f["name"] for f in card["body"]["fields"]], ["category"])
         footer = card["footer"]["left"]
         self.assertEqual([f["name"] for f in footer], ["created_at"])

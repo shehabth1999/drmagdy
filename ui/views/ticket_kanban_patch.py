@@ -13,7 +13,7 @@ Patches the support ticket kanban card (parent key:
     up the same way (the header is a label-less flow-wrap: with five items of
     different widths every card broke the line somewhere else and the date or
     the category landed wherever there was room — 2026-09-24 complaint):
-      header  : Late badge · priority stars · assignee chip   (state + who)
+      header  : priority stars · assignee chip · Late badge   (who + state)
       body    : Category · <chip>                             (labelled row)
       footer  : created date + time, label hidden             (always last)
     ``body`` / ``footer`` are added to the card with a ``modify`` on the
@@ -53,10 +53,11 @@ ticket_kanban_drmagdy_patch = {
     "module": "drmagdy",
     "inheritance_operations": [
         {
-            # Late badge: first in the header row so it is the first thing the
-            # eye meets; readonly keeps it out of the quick-create form.
-            "operation": "before",
-            "target": "field[name=priority]",
+            # Late badge: LAST in the header row (stars, assignee, then the
+            # badge — user's call 2026-09-24); readonly keeps it out of the
+            # quick-create form.
+            "operation": "after",
+            "target": "field[name=assigned_to]",
             "content": {
                 "name": "is_late",
                 "tag": "field",
