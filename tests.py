@@ -135,20 +135,21 @@ class TicketKanbanPatchTests(SimpleTestCase):
         return UIView()._apply_inheritance_operations(body, patch["inheritance_operations"])
 
     def test_card_structure_is_fixed(self):
-        """header = stars, assignee, Late badge (last); body = category row;
-        footer = created date (label hidden). Every card lines up the same."""
+        """header = stars, assignee; body = category row; footer = created
+        date (left, label hidden) and the Late badge (right). Every card
+        lines up the same."""
         result = self._apply()
         card = result["kanban"]["card"]
-        fields = card["header"]["fields"]
-        self.assertEqual([f["name"] for f in fields], ["priority", "assigned_to", "is_late"])
-        badge = fields[-1]
-        self.assertEqual(badge["widget"], "badge")
-        self.assertEqual(badge["color"], "danger")
+        self.assertEqual([f["name"] for f in card["header"]["fields"]], ["priority", "assigned_to"])
         self.assertEqual([f["name"] for f in card["body"]["fields"]], ["category"])
-        footer = card["footer"]["left"]
-        self.assertEqual([f["name"] for f in footer], ["created_at"])
-        self.assertEqual(footer[0]["widget"], "datetime")
-        self.assertTrue(footer[0]["hideLabel"])
+        left = card["footer"]["left"]
+        self.assertEqual([f["name"] for f in left], ["created_at"])
+        self.assertEqual(left[0]["widget"], "datetime")
+        self.assertTrue(left[0]["hideLabel"])
+        right = card["footer"]["right"]
+        self.assertEqual([f["name"] for f in right], ["is_late"])
+        self.assertEqual(right[0]["widget"], "badge")
+        self.assertEqual(right[0]["color"], "danger")
         self.assertIn("header", card)               # profile (title / customer) untouched
         self.assertEqual(card["header"]["profile"]["title"]["name"], "name")
 

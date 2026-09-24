@@ -5,17 +5,18 @@ drmagdy Module - Support Ticket Kanban View Patch.
 Patches the support ticket kanban card (parent key:
 ``support_ticket_kanban_view``) via Odoo-style view inheritance:
 
-  - a red **Late** badge (``is_late``) first in the card header — drawn only
-    on late tickets: the ``badge`` widget skips an off flag
+  - a red **Late** badge (``is_late``) at the end of the card's last row
+    (footer right, opposite the date) — drawn only on late tickets: the
+    ``badge`` widget skips an off flag
     (``project/web/src/widgets/kanban/components/widgets/index.tsx``,
     ``utils/values.ts`` ``isEmptyValue``);
   - a FIXED card structure, one kind of item per block, so every card lines
     up the same way (the header is a label-less flow-wrap: with five items of
     different widths every card broke the line somewhere else and the date or
     the category landed wherever there was room — 2026-09-24 complaint):
-      header  : priority stars · assignee chip · Late badge   (who + state)
+      header  : priority stars · assignee chip                (who)
       body    : Category · <chip>                             (labelled row)
-      footer  : created date + time, label hidden             (always last)
+      footer  : created date + time (left)  ·  Late badge (right)
     ``body`` / ``footer`` are added to the card with a ``modify`` on the
     direct path ``kanban.card`` (dict update), ``created_at`` is removed
     from the header. ``created_at`` shows date + time (``datetime`` widget);
@@ -53,23 +54,6 @@ ticket_kanban_drmagdy_patch = {
     "module": "drmagdy",
     "inheritance_operations": [
         {
-            # Late badge: LAST in the header row (stars, assignee, then the
-            # badge — user's call 2026-09-24); readonly keeps it out of the
-            # quick-create form.
-            "operation": "after",
-            "target": "field[name=assigned_to]",
-            "content": {
-                "name": "is_late",
-                "tag": "field",
-                "widget": "badge",
-                "color": "danger",
-                "icon": "Clock",
-                "readonly": True,
-                "required": False,
-                "string": _("Late"),
-            },
-        },
-        {
             # The date leaves the header flow (it moves to the footer below).
             "operation": "remove",
             "target": "field[name=created_at]",
@@ -106,6 +90,22 @@ ticket_kanban_drmagdy_patch = {
                             "readonly": True,
                             "hideLabel": True,
                             "string": _("Created On"),
+                        },
+                    ],
+                    # Late badge at the END of the last row, opposite the
+                    # date (user's call 2026-09-24); the footer's empty policy
+                    # hides the slot on tickets that are not late. readonly
+                    # keeps it out of the quick-create form.
+                    "right": [
+                        {
+                            "name": "is_late",
+                            "tag": "field",
+                            "widget": "badge",
+                            "color": "danger",
+                            "icon": "Clock",
+                            "readonly": True,
+                            "required": False,
+                            "string": _("Late"),
                         },
                     ],
                 },
