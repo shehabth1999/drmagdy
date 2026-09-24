@@ -133,20 +133,37 @@ def _whatsapp_window_closed(conversation):
         return not last_in or (timezone.now() - last_in) > timedelta(hours=24)
 
 
+def compute_is_late(ticket, now=None, company_id=None):
+    """Value of ``Ticket.is_late``: the expected arrival time has passed while
+    the ticket is still in "اصناف تحت الطلب" and is not cancelled.
+
+    Stored on the ticket (a column, not a Python property) because the kanban
+    ORDERS cards by it and the filter engine can only sort by columns.
+    Recomputed on every save (``TicketExtension.pre_save``) and flipped on at
+    due time by the arrival reminder task (``tasks.notify_due_ticket_arrivals``),
+    which also flips the ribbon to "overdue" at the same moment.
+    """
+    now = now or timezone.now()
+    if getattr(ticket, 'is_cancelled', False):
+        return False
+    arrival = _aware(getattr(ticket, 'expected_arrival_at', None))
+    return bool(arrival and arrival <= now and st.role_of(ticket.stage_id, company_id) == st.UNDER_ORDER)
+
+
 def compute_ribbon_state(ticket, now=None, company_id=None):
     """Value of ``Ticket.ribbon_state`` for the form ribbon.
 
     Precedence (first match wins): cancelled > overdue > returned >
-    very_important > urgent > nothing. "Overdue" means the expected arrival
-    time has passed while the ticket is still in "اصناف تحت الطلب". Called from
+    very_important > urgent > nothing. "Overdue" is exactly ``is_late``
+    (``compute_is_late``): the expected arrival time has passed while the
+    ticket is still in "اصناف تحت الطلب". Called from
     ``TicketExtension.pre_save`` on every save and from the arrival reminder
     task (which flips a ticket to overdue at its due time).
     """
     now = now or timezone.now()
     if getattr(ticket, 'is_cancelled', False):
         return 'cancelled'
-    arrival = _aware(getattr(ticket, 'expected_arrival_at', None))
-    if arrival and arrival <= now and st.role_of(ticket.stage_id, company_id) == st.UNDER_ORDER:
+    if compute_is_late(ticket, now, company_id):
         return 'overdue'
     if getattr(ticket, 'is_returned', False):
         return 'returned'
@@ -191,7 +208,7 @@ def _cancel_note(mode, reason, old_stage_name, user):
 class TicketExtension(ModelExtension):
     """drmagdy additions to support.Ticket: supervisor, images, chat source
     message, and the pharmacy "items under order" workflow (buyer, urgency,
-    supplier code, expected arrival + reminder, contact status,
+    supplier code, expected arrival + reminder, late flag, contact status,
     cancel / return, ribbon)."""
 
     _inherit = 'support.ticket'
@@ -296,6 +313,15 @@ class TicketExtension(ModelExtension):
         blank=True,
         verbose_name=_("Ribbon"),
     )
+    # True while the expected arrival has passed and the ticket is still under
+    # order (compute_is_late). A column rather than a property so the kanban
+    # can sort late tickets first — shown there as a red "Late" badge
+    # (ui/views/ticket_kanban_patch.py); the form keeps the ribbon.
+    is_late = models.BooleanField(
+        default=False,
+        verbose_name=_("Late"),
+        help_text=_("The expected arrival time has passed and the item is still under order"),
+    )
     # Stamped by drmagdy.tasks.notify_due_ticket_arrivals after the one-time
     # alert; cleared in pre_save when the date changes or the ticket re-enters
     # "اصناف تحت الطلب" (re-arm).
@@ -364,6 +390,7 @@ class TicketExtension(ModelExtension):
         if old is None or old['expected_arrival_at'] != self.expected_arrival_at:
             self._rearm_arrival_reminder()
 
+        self.is_late = compute_is_late(self, now, company_id)
         self.ribbon_state = compute_ribbon_state(self, now, company_id)
 
     @action

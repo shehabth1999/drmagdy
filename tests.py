@@ -21,7 +21,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from drmagdy import ticket_stages as st
-from drmagdy.extensions import compute_ribbon_state
+from drmagdy.extensions import compute_is_late, compute_ribbon_state
 
 
 def _load_view_module(relative_path):
@@ -92,6 +92,96 @@ class RibbonStateTests(SimpleTestCase):
             self.assertEqual(compute_ribbon_state(self._ticket(is_cancelled=True, expected_arrival_at=now - timedelta(hours=1)), now), "cancelled")
 
 
+class IsLateTests(SimpleTestCase):
+    """``is_late`` = due + still under order + not cancelled; the ribbon's
+    "overdue" is the same predicate."""
+
+    def _ticket(self, **kwargs):
+        base = dict(is_cancelled=False, expected_arrival_at=None, stage_id=st.UNDER_ORDER)
+        base.update(kwargs)
+        return SimpleNamespace(**base)
+
+    def test_late_only_while_due_under_order_and_not_cancelled(self):
+        now = timezone.now()
+        past, future = now - timedelta(minutes=1), now + timedelta(hours=1)
+        with mock.patch.object(st, "role_of", side_effect=lambda sid, cid=None: sid):
+            self.assertTrue(compute_is_late(self._ticket(expected_arrival_at=past), now))
+            self.assertTrue(compute_is_late(self._ticket(expected_arrival_at=now), now))
+            self.assertFalse(compute_is_late(self._ticket(), now))
+            self.assertFalse(compute_is_late(self._ticket(expected_arrival_at=future), now))
+            self.assertFalse(compute_is_late(self._ticket(expected_arrival_at=past, stage_id=st.ARRIVED), now))
+            self.assertFalse(compute_is_late(self._ticket(expected_arrival_at=past, stage_id=st.PROCESSED), now))
+            self.assertFalse(compute_is_late(self._ticket(expected_arrival_at=past, is_cancelled=True), now))
+
+    def test_naive_datetime_is_compared_as_aware(self):
+        import datetime
+        with mock.patch.object(st, "role_of", side_effect=lambda sid, cid=None: sid):
+            self.assertTrue(compute_is_late(self._ticket(expected_arrival_at=datetime.datetime(2000, 1, 1)), timezone.now()))
+
+
+class TicketKanbanPatchTests(SimpleTestCase):
+    """The kanban patch relies on two core features added 2026-09-24: the
+    ``kanban`` selector (``ui_view.py`` ``_is_element_type``) and
+    ``body.kanban.order_by`` (``kanban_paginated_view.py``). If either goes,
+    the badge still shows but late tickets stop sorting first — this test
+    turns that silent regression into a failure."""
+
+    def _apply(self):
+        from modules.base.models.ui_view import UIView
+        from modules.support.ui.views.tickets import support_ticket_kanban_view
+
+        patch = _load_view_module("ui/views/ticket_kanban_patch.py").ticket_kanban_drmagdy_patch
+        body = copy.deepcopy(support_ticket_kanban_view["body"])
+        return UIView()._apply_inheritance_operations(body, patch["inheritance_operations"])
+
+    def test_late_badge_leads_the_header_fields(self):
+        result = self._apply()
+        fields = result["kanban"]["card"]["header"]["fields"]
+        self.assertEqual(fields[0]["name"], "is_late")
+        self.assertEqual(fields[0]["widget"], "badge")
+        self.assertEqual(fields[0]["color"], "danger")
+        names = [f["name"] for f in fields]
+        self.assertEqual(names, ["is_late", "priority", "assigned_to", "category", "created_at"])
+
+    def test_late_first_is_the_board_default_order(self):
+        result = self._apply()
+        self.assertNotIn("order_by", result, "order_by leaked to the body root: the `kanban` selector changed")
+        self.assertEqual(result["kanban"].get("order_by"), ["-is_late", "-created_at"],
+                         "body.kanban.order_by missing: the `kanban` selector is not resolved by core")
+
+
+class KanbanDefaultOrderTests(SimpleTestCase):
+    """``body.kanban.order_by`` orders the board queryset unless the request
+    sorts itself; a bad declaration falls back to Meta.ordering. Core columns
+    only: the test runner process does not attach extension fields, so
+    ``is_late`` itself is covered by the DB test in TransitionRuleTests."""
+
+    def _view(self, default_order):
+        from modules.base.views.kanban_paginated_view import KanbanPaginatedView
+
+        view = KanbanPaginatedView()
+        view.request = SimpleNamespace(_kanban_ctx={"group_by": None, "default_order": list(default_order)})
+        return view
+
+    def test_default_order_applies_when_the_request_has_none(self):
+        from modules.support.models import Ticket
+
+        qs = self._view(["-priority", "-created_at"]).get_queryset(Ticket)
+        self.assertEqual(tuple(qs.query.order_by), ("-priority", "-created_at"))
+
+    def test_request_order_wins(self):
+        from modules.support.models import Ticket
+
+        qs = self._view(["-priority", "-created_at"]).get_queryset(Ticket, filters={"order_by": ["name"]})
+        self.assertEqual(tuple(qs.query.order_by), ("name",))
+
+    def test_unknown_field_is_ignored(self):
+        from modules.support.models import Ticket
+
+        qs = self._view(["-no_such_column"]).get_queryset(Ticket)
+        self.assertEqual(tuple(qs.query.order_by), ())
+
+
 class TransitionRuleTests(TestCase):
     """Needs a database: creates stages, a branch-less ticket and moves it."""
 
@@ -139,6 +229,32 @@ class TransitionRuleTests(TestCase):
         ticket.save()
         ticket.refresh_from_db()
         self.assertIsNotNone(ticket.closed_at)
+
+    def test_late_flag_follows_stage_and_date(self):
+        from modules.base.models.user import User
+        buyer = User.objects.create_user(email="buyer2@example.com", password="x")
+        ticket = self._make_ticket(buyer=buyer, supplier_code="S-2",
+                                   expected_arrival_at=timezone.now() - timedelta(hours=1))
+        self.assertFalse(ticket.is_late)               # جديد: not under order yet
+        ticket.stage = self.stages[st.UNDER_ORDER]
+        ticket.save()
+        ticket.refresh_from_db()
+        self.assertTrue(ticket.is_late)
+        self.assertEqual(ticket.ribbon_state, "overdue")
+        ticket.expected_arrival_at = timezone.now() + timedelta(days=1)
+        ticket.save()
+        ticket.refresh_from_db()
+        self.assertFalse(ticket.is_late)               # date pushed out
+        self.assertIsNone(ticket.ribbon_state)
+        ticket.expected_arrival_at = timezone.now() - timedelta(hours=1)
+        ticket.save()
+        ticket.refresh_from_db()
+        self.assertTrue(ticket.is_late)
+        ticket._skip_stage_rules = True
+        ticket.stage = self.stages[st.ARRIVED]
+        ticket.save()
+        ticket.refresh_from_db()
+        self.assertFalse(ticket.is_late)               # arrived: no longer late
 
     def test_naive_expected_arrival_from_form_is_accepted(self):
         """The browser posts datetimes without a timezone; comparing them with

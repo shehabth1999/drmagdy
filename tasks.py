@@ -24,7 +24,11 @@ def notify_due_ticket_arrivals():
     passed and the ticket is still in "اصناف تحت الطلب".
 
     Contract (agreed with the customer, 2026-09-14):
-    * only tickets in the under-order stage, not cancelled, not yet notified;
+    * every due ticket (under-order stage, not cancelled, expected arrival in
+      the past) is flagged ``is_late`` and its ribbon flipped to "overdue" on
+      the first tick after its time — whoever is online — so the kanban sorts
+      it first and shows the badge from the deadline, not from the alert;
+    * the ALERT goes only for tickets not yet notified;
     * recipients = users currently online (chat presence, i.e. any ERP tab
       open), excluding AI agents and users without a partner;
     * once per arming: ``arrival_notified_at`` is stamped after the send and
@@ -47,25 +51,32 @@ def notify_due_ticket_arrivals():
     if not under_order:
         return {"skipped": "under-order stage not found"}
 
+    due_qs = Ticket.all_objects.filter(
+        stage_id=under_order,
+        active=True,
+        is_cancelled=False,
+        expected_arrival_at__lte=now,
+    )
+    # Flag first, alert second. .update(): no lifecycle hooks, and pre_save
+    # would compute the very same values (compute_is_late / compute_ribbon_state)
+    # for a due, not-cancelled, under-order ticket.
+    flagged = due_qs.filter(is_late=False).update(is_late=True, ribbon_state="overdue")
+    if flagged:
+        logger.info("drmagdy: %d ticket(s) flagged late", flagged)
+
     due = list(
-        Ticket.all_objects.filter(
-            stage_id=under_order,
-            active=True,
-            is_cancelled=False,
-            arrival_notified_at__isnull=True,
-            expected_arrival_at__lte=now,
-        )
+        due_qs.filter(arrival_notified_at__isnull=True)
         .select_related("partner")
         .order_by("expected_arrival_at")
     )
     if not due:
-        return {"due": 0}
+        return {"due": 0, "flagged": flagged}
 
     online_ids = {int(uid) for uid in presence.get_all_online_user_ids() if str(uid).isdigit()}
     if not online_ids:
         # [] means "nobody online" OR "Redis unavailable" — either way, retry later.
         logger.info("drmagdy: %d ticket(s) due but no online users; will retry next tick", len(due))
-        return {"due": len(due), "online": 0}
+        return {"due": len(due), "flagged": flagged, "online": 0}
 
     partner_ids = list(
         User.objects.filter(pk__in=online_ids, is_active=True, ai_agent=False, partner__isnull=False)
@@ -73,7 +84,7 @@ def notify_due_ticket_arrivals():
         .distinct()
     )
     if not partner_ids:
-        return {"due": len(due), "online": len(online_ids), "recipients": 0}
+        return {"due": len(due), "flagged": flagged, "online": len(online_ids), "recipients": 0}
 
     notified = 0
     for ticket in due:
@@ -114,4 +125,4 @@ def notify_due_ticket_arrivals():
         notified += 1
 
     logger.info("drmagdy: arrival alerts sent for %d ticket(s) to %d recipient(s)", notified, len(partner_ids))
-    return {"due": len(due), "notified": notified, "recipients": len(partner_ids)}
+    return {"due": len(due), "flagged": flagged, "notified": notified, "recipients": len(partner_ids)}

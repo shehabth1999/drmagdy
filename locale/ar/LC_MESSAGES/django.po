@@ -684,3 +684,13 @@ msgstr "أرسل <b>%(user)s</b> %(imgs)d صورة من هذه التذكرة ع
 
 msgid "%(n)d customer(s) skipped (outside the 24-hour window)."
 msgstr "تم تخطي %(n)d عميل (خارج نافذة الـ24 ساعة)."
+
+msgid "Late"
+msgstr "متأخر"
+
+msgctxt "ui/views/ticket_kanban_patch.py"
+msgid "Late"
+msgstr "متأخر"
+
+msgid "The expected arrival time has passed and the item is still under order"
+msgstr "انقضى موعد الوصول المتوقع وما زال الصنف تحت الطلب"
