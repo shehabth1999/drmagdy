@@ -6,8 +6,8 @@
 #                                  layout — supervisor, files, buyer, urgency, supplier
 #                                  code, expected arrival, internal note, contact status,
 #                                  ribbon, Send-to-WhatsApp + Cancel Order buttons)
-#   - ticket_kanban_patch.py      (support.ticket kanban: category + datetime,
-#                                  red "Late" badge, late-first card order)
+#   - ticket_kanban_patch.py      (support.ticket kanban: category + contact status rows,
+#                                  datetime, red "Late" + amber "Urgent" pills, late-first order)
 #   - send_ticket_image_views.py  (wizard: send ticket image to WhatsApp)
 #   - cancel_ticket_views.py      (wizard: cancel order — keep / return)
 #   - bank_roshtat_views.py       (drmagdy.bankroshtat list + form)

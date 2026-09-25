@@ -135,23 +135,41 @@ class TicketKanbanPatchTests(SimpleTestCase):
         return UIView()._apply_inheritance_operations(body, patch["inheritance_operations"])
 
     def test_card_structure_is_fixed(self):
-        """header = stars, assignee; body = category row; footer = created
-        date (left, label hidden) and the Late badge (right). Every card
-        lines up the same."""
+        """header = stars, assignee; body = category + contact status rows;
+        footer = created date (left, label hidden) and the Late + Urgent
+        pills (right). Every card lines up the same."""
         result = self._apply()
         card = result["kanban"]["card"]
         self.assertEqual([f["name"] for f in card["header"]["fields"]], ["priority", "assigned_to"])
-        self.assertEqual([f["name"] for f in card["body"]["fields"]], ["category"])
+        body = card["body"]["fields"]
+        self.assertEqual([f["name"] for f in body], ["category", "contact_status"])
+        self.assertEqual(body[1]["widget"], "select")
+        self.assertTrue(body[1]["readonly"])
         left = card["footer"]["left"]
         self.assertEqual([f["name"] for f in left], ["created_at"])
         self.assertEqual(left[0]["widget"], "datetime")
         self.assertTrue(left[0]["hideLabel"])
         right = card["footer"]["right"]
-        self.assertEqual([f["name"] for f in right], ["is_late"])
-        self.assertEqual(right[0]["widget"], "badge")
-        self.assertEqual(right[0]["color"], "danger")
+        self.assertEqual([f["name"] for f in right], ["is_late", "is_urgent"])
+        self.assertEqual([f["widget"] for f in right], ["badge", "badge"])
+        self.assertEqual([f["color"] for f in right], ["danger", "warning"])
+        self.assertTrue(all(f["readonly"] for f in right))   # never in the quick-create form
+        # "Urgent" is bilingual on purpose: core modules translate the msgid as
+        # "عاجل" and outrank the extension in the merged catalogue.
+        self.assertEqual(right[1]["string"], {"ar": "مستعجل", "en": "Urgent"})
         self.assertIn("header", card)               # profile (title / customer) untouched
         self.assertEqual(card["header"]["profile"]["title"]["name"], "name")
+
+    def test_contact_status_options_match_choices(self):
+        """The card cannot expand model choices itself (kanban_board.py only
+        rewrites relation widgets), so the patch carries the options: same
+        keys and the same English msgids as choices.CONTACT_STATUS_CHOICES,
+        which is what the Arabic catalogue translates."""
+        from drmagdy.choices import CONTACT_STATUS_CHOICES
+
+        result = self._apply()
+        field = next(f for f in result["kanban"]["card"]["body"]["fields"] if f["name"] == "contact_status")
+        self.assertEqual(field["options"], {key: str(label) for key, label in CONTACT_STATUS_CHOICES})
 
     def test_late_first_is_the_board_default_order(self):
         result = self._apply()
