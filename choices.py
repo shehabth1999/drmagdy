@@ -35,6 +35,7 @@ CANCEL_MODE_CHOICES = [
 # (last in INSTALLED_APPS) the lowest priority — the context keeps OUR words.
 RIBBON_CHOICES = [
     ("cancelled", pgettext_lazy("ribbon", "Cancelled")),
+    ("delivered", pgettext_lazy("ribbon", "Delivered")),
     ("overdue", pgettext_lazy("ribbon", "Overdue")),
     ("returned", pgettext_lazy("ribbon", "Returned")),
     ("very_important", pgettext_lazy("ribbon", "Very important")),

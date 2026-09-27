@@ -7,7 +7,8 @@ with the pharmacy layout:
 
   * the whole ``sheet`` is RESTATED (base fields verbatim + drmagdy fields +
     stage-driven visibility/readonly rules + ribbon);
-  * ``Send to WhatsApp`` and ``Cancel Order`` are appended to ``header.actions``.
+  * ``Send to WhatsApp``, ``Cancel Order`` and ``Delivered`` are appended to
+    ``header.actions``.
 
 Why the sheet is restated instead of injected field by field
 -------------------------------------------------------------
@@ -34,6 +35,7 @@ from django.utils.translation import gettext as _
 
 from drmagdy.ticket_stages import (
     ARRIVED,
+    DELIVERABLE_FROM,
     PROCESSED,
     any_of,
     not_stage_cond,
@@ -42,6 +44,7 @@ from drmagdy.ticket_stages import (
 
 
 IS_CANCELLED = {"field": "is_cancelled", "operator": "eq", "value": True}
+IS_DELIVERED = {"field": "is_delivered", "operator": "eq", "value": True}
 
 # Order fields are frozen once the ticket is processed or cancelled.
 LOCKED = any_of(*stage_leaves([PROCESSED], "in"), IS_CANCELLED)
@@ -66,6 +69,7 @@ DRMAGDY_TICKET_SHEET = {
     "ribbon": {
         "field_text": "ribbon_state",
         "color": {
+            "success": ["delivered"],
             "danger": ["cancelled", "overdue"],
             "warning": ["returned"],
             "info": ["very_important"],
@@ -244,7 +248,7 @@ DRMAGDY_TICKET_SHEET = {
                             "required": False,
                             "readonly": LOCKED,
                             "placeholder": _("Who buys this order..."),
-                            "help": _("Mandatory before moving the ticket to \"اصناف تحت الطلب\""),
+                            "help": _("Mandatory before moving the ticket to \"اصناف تحت الطلب\" or \"اصناف وصلت\""),
                             "domain": {
                                 "filters": {
                                     "operator": "and",
@@ -264,7 +268,7 @@ DRMAGDY_TICKET_SHEET = {
                             "required": False,
                             "readonly": LOCKED,
                             "placeholder": _("Enter supplier code"),
-                            "help": _("Mandatory before moving the ticket to \"اصناف تحت الطلب\""),
+                            "help": _("Mandatory before moving the ticket to \"اصناف تحت الطلب\" or \"اصناف وصلت\""),
                         },
                         {
                             "name": "expected_arrival_at",
@@ -272,7 +276,7 @@ DRMAGDY_TICKET_SHEET = {
                             "widget": "datetime",
                             "required": False,
                             "readonly": LOCKED,
-                            "help": _("When the ordered item should arrive. Mandatory before moving to \"اصناف تحت الطلب\"; online users are alerted once it passes while the ticket is still there."),
+                            "help": _("When the ordered item should arrive. Mandatory before moving to \"اصناف تحت الطلب\" or \"اصناف وصلت\"; online users are alerted once it passes while the ticket is still there."),
                         },
                     ]
                 },
@@ -304,12 +308,22 @@ DRMAGDY_TICKET_SHEET = {
                             "readonly": LOCKED,
                             "help": _("Result of contacting the customer. Mandatory before closing from \"اصناف وصلت\""),
                         },
+                        {
+                            # Stamped by the "Delivered" button; shown once delivered.
+                            "name": "delivered_at",
+                            "string": _("Delivered on"),
+                            "widget": "datetime",
+                            "required": False,
+                            "readonly": True,
+                            "invisible": {"field": "is_delivered", "operator": "ne", "value": True},
+                        },
                         # Hidden, server-maintained fields. They must be part of
                         # the form schema so the record payload carries them (the
                         # ribbon and the conditions above read them).
                         {"name": "ribbon_state", "string": _("Ribbon"), "widget": "select", "invisible": True, "readonly": True},
                         {"name": "is_cancelled", "string": _("Cancelled"), "widget": "switch", "invisible": True, "readonly": True},
                         {"name": "is_returned", "string": _("Returned"), "widget": "switch", "invisible": True, "readonly": True},
+                        {"name": "is_delivered", "string": _("Delivered"), "widget": "switch", "invisible": True, "readonly": True},
                     ]
                 },
             ],
@@ -519,6 +533,29 @@ ticket_form_drmagdy_patch = {
                     "view_type": ["form"],
                     "on_success": {"type": "refresh"},
                     "invisible": any_of(*stage_leaves([PROCESSED], "in"), IS_CANCELLED),
+                },
+            ],
+        },
+        # 4) Server action "Delivered": closes the ticket into "تمت المعالجة"
+        # and flags the order delivered (green ribbon, kanban pill). Handler:
+        # Ticket.action_mark_delivered(queryset). Shown only in the stages of
+        # DELIVERABLE_FROM ("اصناف وصلت"), never on a cancelled or already
+        # delivered ticket; the handler re-checks all of it server-side.
+        {
+            "operation": "append",
+            "target": "header.actions",
+            "content": [
+                {
+                    "name": "action_mark_delivered",
+                    "string": _("Delivered"),
+                    "icon": "PackageCheck",
+                    "type": "server",
+                    "as": "button",
+                    "variant": "success",
+                    "view_type": ["form"],
+                    "confirm_required": True,
+                    "confirm_color": "success",
+                    "invisible": {"or": [not_stage_cond(*DELIVERABLE_FROM), IS_CANCELLED, IS_DELIVERED]},
                 },
             ],
         },

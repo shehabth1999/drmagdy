@@ -153,8 +153,9 @@ def compute_is_late(ticket, now=None, company_id=None):
 def compute_ribbon_state(ticket, now=None, company_id=None):
     """Value of ``Ticket.ribbon_state`` for the form ribbon.
 
-    Precedence (first match wins): cancelled > overdue > returned >
-    very_important > urgent > nothing. "Overdue" is exactly ``is_late``
+    Precedence (first match wins): cancelled > delivered > overdue > returned >
+    very_important > urgent > nothing. "Delivered" (green) is set by the
+    Delivered button (``action_mark_delivered``). "Overdue" is exactly ``is_late``
     (``compute_is_late``): the expected arrival time has passed while the
     ticket is still in "اصناف تحت الطلب". Called from
     ``TicketExtension.pre_save`` on every save and from the arrival reminder
@@ -163,6 +164,8 @@ def compute_ribbon_state(ticket, now=None, company_id=None):
     now = now or timezone.now()
     if getattr(ticket, 'is_cancelled', False):
         return 'cancelled'
+    if getattr(ticket, 'is_delivered', False):
+        return 'delivered'
     if compute_is_late(ticket, now, company_id):
         return 'overdue'
     if getattr(ticket, 'is_returned', False):
@@ -209,7 +212,7 @@ class TicketExtension(ModelExtension):
     """drmagdy additions to support.Ticket: supervisor, images, chat source
     message, and the pharmacy "items under order" workflow (buyer, urgency,
     supplier code, expected arrival + reminder, late flag, contact status,
-    cancel / return, ribbon)."""
+    cancel / return, delivered, ribbon)."""
 
     _inherit = 'support.ticket'
     _depends = ['support', 'chat']
@@ -306,6 +309,11 @@ class TicketExtension(ModelExtension):
     cancel_reason = models.TextField(null=True, blank=True, verbose_name=_("Cancel reason"))
     cancelled_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Cancelled / returned on"))
     return_count = models.IntegerField(default=0, verbose_name=_("Times returned"))
+    # Set by the form's "Delivered" button (action_mark_delivered), which also
+    # closes the ticket into "تمت المعالجة". Cleared by pre_save if the ticket
+    # is moved out of the closed stage again.
+    is_delivered = models.BooleanField(default=False, verbose_name=_("Delivered"))
+    delivered_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Delivered on"))
     ribbon_state = models.CharField(
         max_length=20,
         choices=RIBBON_CHOICES,
@@ -384,6 +392,10 @@ class TicketExtension(ModelExtension):
                     self.closed_at = now
             elif old_role in st.CLOSED:
                 self.closed_at = None
+            if new_role not in st.CLOSED and self.is_delivered:
+                # Reopened after delivery: no longer a delivered order.
+                self.is_delivered = False
+                self.delivered_at = None
             if new_role == st.UNDER_ORDER:
                 self._rearm_arrival_reminder()
 
@@ -469,6 +481,86 @@ class TicketExtension(ModelExtension):
         message = gettext("%(n)d ticket(s) processed.") % {'n': done}
         if skipped:
             message += " " + gettext("Already cancelled: %(ids)s") % {'ids': ', '.join(skipped)}
+        return {
+            'status': True,
+            'open_mode': 'message',
+            'message': message,
+            'data': {},
+            'on_success': {'type': 'refresh'},
+        }
+
+    @action
+    def action_mark_delivered(queryset):
+        """"Delivered" button on the ticket form (server action, confirm dialog).
+
+        For every ticket in a stage of ``st.DELIVERABLE_FROM`` ("اصناف وصلت")
+        that is neither cancelled nor already delivered:
+          1. flag it delivered (``is_delivered`` + ``delivered_at``) — pre_save
+             turns the form ribbon green ("delivered") and the kanban card
+             shows the "Delivered" pill;
+          2. close it into "تمت المعالجة".
+        The delivery IS the outcome of contacting the customer, so the
+        "contact status before closing from اصناف وصلت" rule is waived for
+        this move (stage rules bypassed) and ``contact_status`` is left as it
+        was. Posts an internal chatter note.
+        """
+        user = get_current_user()
+        now = timezone.now()
+        done, skipped = 0, []
+
+        for ticket in queryset:
+            company_id = getattr(getattr(ticket, 'branch', None), 'company_id', None)
+            if (
+                ticket.is_cancelled
+                or ticket.is_delivered
+                or st.role_of(ticket.stage_id, company_id) not in st.DELIVERABLE_FROM
+            ):
+                skipped.append(f"#{ticket.id}")
+                continue
+
+            target_stage_id = st.stage_id(st.PROCESSED, company_id)
+            if not target_stage_id:
+                return {
+                    'status': False,
+                    'open_mode': 'message',
+                    'message': gettext('Ticket stage "%(stage)s" was not found; nothing was changed.') % {
+                        'stage': st.STAGE_NAMES[st.PROCESSED],
+                    },
+                    'data': {},
+                }
+
+            ticket._skip_stage_rules = True
+            ticket.is_delivered = True
+            ticket.delivered_at = now
+            ticket.stage_id = target_stage_id
+            ticket.closed_at = now
+            ticket.save()  # full save → pre_save recomputes the ribbon / late flag
+
+            try:
+                who = getattr(user, 'name', None) or getattr(user, 'email', None) or '-'
+                ticket.message_post(
+                    body="<br/>".join([
+                        gettext("Order delivered to the customer — ticket closed."),
+                        gettext("By: %(user)s") % {'user': who},
+                    ]),
+                    message_type='note',
+                )
+            except Exception:  # noqa: BLE001 - chatter is best effort
+                logger.exception("drmagdy: delivered note failed for ticket #%s", ticket.pk)
+            done += 1
+
+        if not done:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext(
+                    'Only tickets in "%(stage)s" that are not cancelled can be marked as delivered.'
+                ) % {'stage': st.STAGE_NAMES[st.ARRIVED]},
+                'data': {},
+            }
+        message = gettext("%(n)d ticket(s) marked as delivered.") % {'n': done}
+        if skipped:
+            message += " " + gettext("Skipped: %(ids)s") % {'ids': ', '.join(skipped)}
         return {
             'status': True,
             'open_mode': 'message',

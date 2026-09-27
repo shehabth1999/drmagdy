@@ -57,10 +57,36 @@ class TicketFormPatchTests(SimpleTestCase):
         self.assertEqual(result["sheet"]["ribbon"]["field_text"], "ribbon_state")
         names = _field_names(result["sheet"])
         for expected in ("name", "team", "supervisor", "files", "buyer", "supplier_code",
-                         "expected_arrival_at", "contact_status", "ribbon_state"):
+                         "expected_arrival_at", "contact_status", "ribbon_state",
+                         "is_delivered", "delivered_at"):
             self.assertIn(expected, names)
         actions = {a["name"] for a in result["header"]["actions"]}
-        self.assertEqual(actions, {"action_send_ticket_image_to_conversations", "action_cancel_ticket"})
+        self.assertEqual(actions, {"action_send_ticket_image_to_conversations", "action_cancel_ticket",
+                                   "action_mark_delivered"})
+        self.assertIn("delivered", result["sheet"]["ribbon"]["color"]["success"])
+
+    def test_delivered_button_only_in_deliverable_stages(self):
+        """Server action with a confirm dialog, hidden outside DELIVERABLE_FROM
+        ("اصناف وصلت") and on cancelled / delivered tickets."""
+        patch = _load_view_module("ui/views/ticket_form_patch.py").ticket_form_drmagdy_patch
+        button = next(
+            a for op in patch["inheritance_operations"] if op["target"] == "header.actions"
+            for a in op["content"] if a["name"] == "action_mark_delivered"
+        )
+        self.assertEqual(button["type"], "server")
+        self.assertTrue(button["confirm_required"])
+        self.assertEqual(st.DELIVERABLE_FROM, (st.ARRIVED,))
+        hide_when = button["invisible"]["or"]
+        self.assertEqual(hide_when[0], st.not_stage_cond(*st.DELIVERABLE_FROM))
+        self.assertEqual({leaf["field"] for leaf in hide_when[1:]}, {"is_cancelled", "is_delivered"})
+
+    def test_order_fields_required_for_under_order_and_arrived(self):
+        """Owner's rule (2026-09-27): never into "اصناف وصلت" without the order
+        data either — from any previous stage."""
+        for role in (st.UNDER_ORDER, st.ARRIVED):
+            rule = st.TRANSITION_RULES[role]
+            self.assertEqual(set(rule["required"]), {"buyer", "supplier_code", "expected_arrival_at"})
+            self.assertNotIn("required_from", rule)
 
     def test_stage_conditions_cover_both_value_shapes(self):
         cond = st.stage_cond(st.PROCESSED)
@@ -72,7 +98,8 @@ class TicketFormPatchTests(SimpleTestCase):
 class RibbonStateTests(SimpleTestCase):
     def _ticket(self, **kwargs):
         base = dict(is_cancelled=False, is_returned=False, is_very_important=False,
-                    is_urgent=False, expected_arrival_at=None, stage_id=st.UNDER_ORDER)
+                    is_urgent=False, is_delivered=False, expected_arrival_at=None,
+                    stage_id=st.UNDER_ORDER)
         base.update(kwargs)
         return SimpleNamespace(**base)
 
@@ -90,6 +117,9 @@ class RibbonStateTests(SimpleTestCase):
             elsewhere = self._ticket(stage_id=st.ARRIVED, expected_arrival_at=now - timedelta(hours=1))
             self.assertIsNone(compute_ribbon_state(elsewhere, now))
             self.assertEqual(compute_ribbon_state(self._ticket(is_cancelled=True, expected_arrival_at=now - timedelta(hours=1)), now), "cancelled")
+            delivered = self._ticket(is_delivered=True, is_urgent=True, is_returned=True, stage_id=st.PROCESSED)
+            self.assertEqual(compute_ribbon_state(delivered, now), "delivered")
+            self.assertEqual(compute_ribbon_state(self._ticket(is_delivered=True, is_cancelled=True), now), "cancelled")
 
 
 class IsLateTests(SimpleTestCase):
@@ -135,28 +165,29 @@ class TicketKanbanPatchTests(SimpleTestCase):
         return UIView()._apply_inheritance_operations(body, patch["inheritance_operations"])
 
     def test_card_structure_is_fixed(self):
-        """header = stars, assignee; body = category + contact status rows;
-        footer = created date (left, label hidden) and the Late + Urgent
-        pills (right). Every card lines up the same."""
+        """header = stars, assignee; body = category row + contact-status
+        pill; footer = created date (left, label hidden) and the Delivered /
+        Cancelled / Late / Urgent pills (right). Every card lines up the same."""
         result = self._apply()
         card = result["kanban"]["card"]
         self.assertEqual([f["name"] for f in card["header"]["fields"]], ["priority", "assigned_to"])
         body = card["body"]["fields"]
         self.assertEqual([f["name"] for f in body], ["category", "contact_status"])
-        self.assertEqual(body[1]["widget"], "select")
+        self.assertEqual(body[1]["widget"], "badge")        # a status pill, not a text row
         self.assertTrue(body[1]["readonly"])
         left = card["footer"]["left"]
         self.assertEqual([f["name"] for f in left], ["created_at"])
         self.assertEqual(left[0]["widget"], "datetime")
         self.assertTrue(left[0]["hideLabel"])
         right = card["footer"]["right"]
-        self.assertEqual([f["name"] for f in right], ["is_late", "is_urgent"])
-        self.assertEqual([f["widget"] for f in right], ["badge", "badge"])
-        self.assertEqual([f["color"] for f in right], ["danger", "warning"])
+        self.assertEqual([f["name"] for f in right], ["is_delivered", "is_cancelled", "is_late", "is_urgent"])
+        self.assertEqual({f["widget"] for f in right}, {"badge"})
+        self.assertEqual([f["color"] for f in right], ["success", "danger", "danger", "warning"])
         self.assertTrue(all(f["readonly"] for f in right))   # never in the quick-create form
-        # "Urgent" is bilingual on purpose: core modules translate the msgid as
-        # "عاجل" and outrank the extension in the merged catalogue.
-        self.assertEqual(right[1]["string"], {"ar": "مستعجل", "en": "Urgent"})
+        # Bilingual on purpose: core modules translate "Urgent" as "عاجل" and
+        # "Cancelled" as "ملغاة", and outrank the extension in the merged catalogue.
+        self.assertEqual(right[3]["string"], {"ar": "مستعجل", "en": "Urgent"})
+        self.assertEqual(right[1]["string"], {"ar": "ملغي", "en": "Cancelled"})
         self.assertIn("header", card)               # profile (title / customer) untouched
         self.assertEqual(card["header"]["profile"]["title"]["name"], "name")
 
@@ -170,6 +201,8 @@ class TicketKanbanPatchTests(SimpleTestCase):
         result = self._apply()
         field = next(f for f in result["kanban"]["card"]["body"]["fields"] if f["name"] == "contact_status")
         self.assertEqual(field["options"], {key: str(label) for key, label in CONTACT_STATUS_CHOICES})
+        # every status has its own pill tone
+        self.assertEqual(set(field["colors"]), {key for key, _label in CONTACT_STATUS_CHOICES})
 
     def test_late_first_is_the_board_default_order(self):
         result = self._apply()

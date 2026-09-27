@@ -10,24 +10,28 @@ Patches the support ticket kanban card (parent key:
     different widths every card broke the line somewhere else and the date or
     the category landed wherever there was room — 2026-09-24 complaint):
       header  : priority stars · assignee chip                 (who)
-      body    : Category · <chip>                              (labelled rows)
-                Contact status · <label>                       (only when set)
-      footer  : created date + time (left) · Late · Urgent pills (right)
+      body    : Category · <chip>                              (labelled row)
+                <contact-status pill>                          (only when set)
+      footer  : created date + time (left) ·
+                Delivered | Cancelled · Late · Urgent pills    (right)
     ``body`` / ``footer`` are added to the card with a ``modify`` on the
     direct path ``kanban.card`` (dict update), ``created_at`` is removed
     from the header. ``created_at`` shows date + time (``datetime`` widget);
-  - two state pills (``badge`` widget, solid fill, drawn ONLY when the flag is
-    on — the widget skips an off flag, ``utils/values.ts`` ``isEmptyValue``):
+  - four state pills (``badge`` widget, solid fill, drawn ONLY when the flag
+    is on — the widget skips an off flag, ``utils/values.ts`` ``isEmptyValue``):
+      * green **Delivered** (``is_delivered``) / red **Cancelled**
+        (``is_cancelled``): the order outcome (2026-09-27);
       * red **Late** (``is_late``): expected arrival passed, still under order;
       * amber **Urgent** (``is_urgent``): the pharmacy's مستعجل flag.
-    Both are readonly so they stay out of the quick-create form
+    All are readonly so they stay out of the quick-create form
     (``project/web/src/widgets/kanban/components/widgets/index.tsx``);
-  - **Contact status** (``contact_status``, a choices column) as a labelled
-    body row. The kanban card schema does NOT expand model choices for card
-    fields (``kanban_board.py`` ``build_card_schema`` only rewrites relation
-    widgets), so the ``options`` are given here explicitly and MUST match
-    ``choices.CONTACT_STATUS_CHOICES`` — ``drmagdy/tests.py`` asserts it. The
-    row is hidden on tickets with no status (empty-value policy);
+  - **Contact status** (``contact_status``, a choices column) as a coloured
+    status pill in the body, one tone per value (``colors``). The kanban card
+    schema does NOT expand model choices for card fields (``kanban_board.py``
+    ``build_card_schema`` only rewrites relation widgets), so the ``options``
+    are given here explicitly and MUST match ``choices.CONTACT_STATUS_CHOICES``
+    — ``drmagdy/tests.py`` asserts it (and that every key has a tone). The
+    pill is hidden on tickets with no status (empty-value policy);
   - **late tickets first** in every column, then newest first:
     ``body.kanban.order_by`` is the board's default card order
     (``modules/base/views/kanban_paginated_view.py``); a sort picked in the
@@ -64,10 +68,20 @@ CONTACT_STATUS_CARD_OPTIONS = {
     "delivered": _("Delivered"),
 }
 
+# Tone of the contact-status pill per stored key: red = nobody answered
+# (follow up), amber = waiting on the customer, blue = coming to pick up,
+# green = delivered.
+CONTACT_STATUS_CARD_COLORS = {
+    "no_answer": "danger",
+    "contacted_waiting": "warning",
+    "contacted_will_pickup": "info",
+    "delivered": "success",
+}
+
 
 ticket_kanban_drmagdy_patch = {
     "key": "ticket_kanban_drmagdy_patch",
-    "name": "Support Ticket Kanban - drmagdy Late/Urgent pills, Contact status, Type, Datetime",
+    "name": "Support Ticket Kanban - drmagdy order status, Late/Urgent pills, Contact status, Type, Datetime",
     "model": "support.ticket",
     "view_type": "kanban",
     "priority": 50,
@@ -102,13 +116,21 @@ ticket_kanban_drmagdy_patch = {
                         },
                         {
                             # Outcome of contacting the customer once the item
-                            # arrived. Plain labelled text (the select card
-                            # widget maps key -> option label); hidden while
-                            # unset, so cards before "اصناف وصلت" stay short.
+                            # arrived, as a status pill (owner's call
+                            # 2026-09-27: "a status, not a normal field"). The
+                            # badge maps key -> option label and key -> tone
+                            # (`colors`); `color` is the tone for a value
+                            # `colors` does not name. The phone icon says what
+                            # the pill is about, since a badge draws no label.
+                            # Hidden while unset, so cards before "اصناف
+                            # وصلت" stay short.
                             "name": "contact_status",
                             "tag": "field",
-                            "widget": "select",
+                            "widget": "badge",
                             "options": CONTACT_STATUS_CARD_OPTIONS,
+                            "colors": CONTACT_STATUS_CARD_COLORS,
+                            "color": "info",
+                            "icon": "PhoneCall",
                             "required": False,
                             "readonly": True,
                             "string": _("Contact status"),
@@ -134,6 +156,32 @@ ticket_kanban_drmagdy_patch = {
                     # quick-create form. Late first: it outranks urgency on the
                     # form ribbon too (compute_ribbon_state).
                     "right": [
+                        # Order outcome first (owner, 2026-09-27): green
+                        # Delivered (the form's Delivered button) or red
+                        # Cancelled (the Cancel Order wizard, item kept). The
+                        # two never meet, and neither meets Late (late needs an
+                        # open, uncancelled ticket). Bilingual labels: core
+                        # catalogues translate "Cancelled" as "ملغاة".
+                        {
+                            "name": "is_delivered",
+                            "tag": "field",
+                            "widget": "badge",
+                            "color": "success",
+                            "icon": "PackageCheck",
+                            "readonly": True,
+                            "required": False,
+                            "string": {"ar": "تم التسليم", "en": "Delivered"},
+                        },
+                        {
+                            "name": "is_cancelled",
+                            "tag": "field",
+                            "widget": "badge",
+                            "color": "danger",
+                            "icon": "XCircle",
+                            "readonly": True,
+                            "required": False,
+                            "string": {"ar": "ملغي", "en": "Cancelled"},
+                        },
                         {
                             "name": "is_late",
                             "tag": "field",

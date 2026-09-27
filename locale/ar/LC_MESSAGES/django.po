@@ -546,8 +546,8 @@ msgid "Who buys this order..."
 msgstr "من سيشتري هذا الطلب..."
 
 msgctxt "ui/views/ticket_form_patch.py"
-msgid "Mandatory before moving the ticket to \"اصناف تحت الطلب\""
-msgstr "مطلوب قبل نقل التذكرة إلى «اصناف تحت الطلب»"
+msgid "Mandatory before moving the ticket to \"اصناف تحت الطلب\" or \"اصناف وصلت\""
+msgstr "مطلوب قبل نقل التذكرة إلى «اصناف تحت الطلب» أو «اصناف وصلت»"
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Supplier code"
@@ -562,8 +562,8 @@ msgid "Expected arrival"
 msgstr "موعد الوصول المتوقع"
 
 msgctxt "ui/views/ticket_form_patch.py"
-msgid "When the ordered item should arrive. Mandatory before moving to \"اصناف تحت الطلب\"; online users are alerted once it passes while the ticket is still there."
-msgstr "موعد وصول الصنف المطلوب. مطلوب قبل النقل إلى «اصناف تحت الطلب»؛ يتم تنبيه المستخدمين المتصلين عند تجاوزه والتذكرة ما زالت هناك."
+msgid "When the ordered item should arrive. Mandatory before moving to \"اصناف تحت الطلب\" or \"اصناف وصلت\"; online users are alerted once it passes while the ticket is still there."
+msgstr "موعد وصول الصنف المطلوب. مطلوب قبل النقل إلى «اصناف تحت الطلب» أو «اصناف وصلت»؛ يتم تنبيه المستخدمين المتصلين عند تجاوزه والتذكرة ما زالت هناك."
 
 msgctxt "ui/views/ticket_form_patch.py"
 msgid "Urgent"
@@ -694,3 +694,31 @@ msgstr "متأخر"
 
 msgid "The expected arrival time has passed and the item is still under order"
 msgstr "انقضى موعد الوصول المتوقع وما زال الصنف تحت الطلب"
+
+# Delivered button / order status (2026-09-27)
+msgid "Delivered on"
+msgstr "تاريخ التسليم"
+
+msgctxt "ribbon"
+msgid "Delivered"
+msgstr "تم التسليم"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Delivered"
+msgstr "تم التسليم"
+
+msgctxt "ui/views/ticket_form_patch.py"
+msgid "Delivered on"
+msgstr "تاريخ التسليم"
+
+msgid "Order delivered to the customer — ticket closed."
+msgstr "تم تسليم الطلب للعميل — تم إغلاق التذكرة."
+
+msgid "Only tickets in \"%(stage)s\" that are not cancelled can be marked as delivered."
+msgstr "لا يمكن تسليم إلا التذاكر الموجودة في «%(stage)s» وغير الملغاة."
+
+msgid "%(n)d ticket(s) marked as delivered."
+msgstr "تم تسليم %(n)d تذكرة."
+
+msgid "Skipped: %(ids)s"
+msgstr "تم تخطي: %(ids)s"

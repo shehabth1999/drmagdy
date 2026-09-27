@@ -90,15 +90,23 @@ def any_of(*leaves):
 # from moving tickets with no way to fill the fields.
 ENFORCE_STAGE_RULES = True
 
+# The order data ("بيانات الطلب") a ticket must carry before it may enter
+# "اصناف تحت الطلب" and, per the owner (2026-09-27), before it may ever enter
+# "اصناف وصلت" — also when a ticket skips the under-order stage.
+ORDER_FIELDS = {
+    "buyer": _("Buyer"),
+    "expected_arrival_at": _("Expected arrival"),
+    "supplier_code": _("Supplier code"),
+}
+
 # role entered -> fields that must be filled. ``required_from`` restricts the
 # rule to a specific previous stage. Labels are what the blocking message shows.
 TRANSITION_RULES = {
     UNDER_ORDER: {
-        "required": {
-            "buyer": _("Buyer"),
-            "expected_arrival_at": _("Expected arrival"),
-            "supplier_code": _("Supplier code"),
-        },
+        "required": ORDER_FIELDS,
+    },
+    ARRIVED: {
+        "required": ORDER_FIELDS,
     },
     PROCESSED: {
         "required_from": {
@@ -106,6 +114,11 @@ TRANSITION_RULES = {
         },
     },
 }
+
+# Stages the "Delivered" button (TicketExtension.action_mark_delivered) may
+# close a ticket from. Drives both the button's visibility on the form and the
+# server-side check.
+DELIVERABLE_FROM = (ARRIVED,)
 
 
 # --- Backend resolution -------------------------------------------------------
