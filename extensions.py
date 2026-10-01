@@ -609,8 +609,8 @@ class TicketExtension(ModelExtension):
             }
         return body + "</ul>"
 
-    @onchange('whatsapp_account')
-    def _onchange_wizard_whatsapp_account(self):
+    @onchange('whatsapp_line')
+    def _onchange_wizard_whatsapp_line(self):
         """Mirror of the Send-Ticket-Image wizard's number onchange, registered
         on support.ticket.
 
@@ -619,18 +619,16 @@ class TicketExtension(ModelExtension):
         (``support.ticket``) — its ``model`` prop takes priority over the
         wizard view's model — so the registration on
         ``drmagdy.sendticketimageaction`` is never hit from the UI. Tickets
-        have no ``whatsapp_account`` field, so this can ONLY fire from that
-        wizard form. The account id is read from the posted values via the
+        have no ``whatsapp_line`` field, so this can ONLY fire from that
+        wizard form. The picked line is read from the posted values via the
         onchange proxy's ``_original_data`` (a Ticket instance can't hold it).
 
         Effect in the wizard: clears the Customers (العملاء) field and narrows
-        its picker to customers of the selected number.
+        its picker to customers of the selected line.
         """
-        from .models import send_wizard_account_change_result
+        from .whatsapp_lines import line_change_result
 
-        raw = getattr(self, '_original_data', {}).get('whatsapp_account')
-        account_id = raw.get('id') if isinstance(raw, dict) else raw
-        return send_wizard_account_change_result(account_id)
+        return line_change_result(getattr(self, '_original_data', {}).get('whatsapp_line'))
 
     @action
     def action_send_ticket_image_to_conversations(queryset, form):
@@ -639,19 +637,23 @@ class TicketExtension(ModelExtension):
 
         Opened via the `type: "menu"` button on the ticket form view; `form` is
         the saved ``drmagdy.SendTicketImageAction`` transient holding the wizard
-        input. For each selected customer we resolve their ONE conversation on
-        the selected WhatsApp number (unique per the chat
+        input. The line to send from is a WhatsApp API account or a WhatsApp
+        Web connection (``whatsapp_lines.py``). For each selected customer we
+        resolve their ONE conversation on that line (unique per the chat
         `unique_social_partner_account_combination` constraint), create a chat
         MessageAttachment that references the SAME stored file (no copy), and
-        create the outbound Message — `Message.post_create` then queues the
-        actual WhatsApp send (`process_handling_message`) which reads
-        `content.attachment.url` + `content.caption`.
+        create the outbound Message — `Message.post_create` then hands it to
+        the line's account (`handle_message`), which queues the actual send:
+        the API task reads `content.attachment.url` + `content.caption`, the
+        WhatsApp Web task sends the attachment's file with `content.caption`.
         """
         from django.contrib.contenttypes.models import ContentType
         from modules.base.models import Partner
         from modules.chat.models import Conversation, ConversationMember, Message, MessageAttachment
         from modules.chat.services.message_sender_service import MessageSenderService
         from modules.whatsapp.utils.media import whatsapp_media_url
+
+        from .whatsapp_lines import WEB, get_line_account
 
         # Managers/admins only (admins imply support.managers). The button is
         # also hidden via allowed_groups, but the UI is not a security layer —
@@ -686,13 +688,27 @@ class TicketExtension(ModelExtension):
                 'data': {},
             }
 
-        account = form.whatsapp_account
+        kind, account = get_line_account(form.whatsapp_line)
         partners = list(form.partners.all())
         if not account or not partners:
             return {
                 'status': False,
                 'open_mode': 'message',
                 'message': gettext("Select a WhatsApp number and at least one customer."),
+                'data': {},
+            }
+
+        # A WhatsApp Web connection only sends while its session is live; the
+        # gateway would otherwise fail every message after the wizard said
+        # "queued".
+        if kind == WEB and not account.is_connected:
+            return {
+                'status': False,
+                'open_mode': 'message',
+                'message': gettext(
+                    "Nothing was sent: the WhatsApp Web number %(number)s is not connected. "
+                    "Reconnect it or pick another number."
+                ) % {'number': account.phone_number or account.name},
                 'data': {},
             }
 
@@ -766,14 +782,15 @@ class TicketExtension(ModelExtension):
                 'data': {},
             }
 
-        # WhatsApp refuses free-form messages (images included) to a customer who
-        # has not written to this number in the last 24 hours (error 131047).
-        # The refusal arrives asynchronously, so without this check the wizard
-        # reported "queued" while the customer silently never received the
-        # image. Skip those customers and name them in the result.
+        # The WhatsApp API refuses free-form messages (images included) to a
+        # customer who has not written to this number in the last 24 hours
+        # (error 131047). The refusal arrives asynchronously, so without this
+        # check the wizard reported "queued" while the customer silently never
+        # received the image. Skip those customers and name them in the result.
+        # WhatsApp Web has no such window.
         closed_names, open_partners = [], []
         for partner in partners:
-            if _whatsapp_window_closed(conversation_by_partner[partner.pk]):
+            if kind != WEB and _whatsapp_window_closed(conversation_by_partner[partner.pk]):
                 closed_names.append(partner.name or str(partner.pk))
             else:
                 open_partners.append(partner)

@@ -21,6 +21,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from drmagdy import ticket_stages as st
+from drmagdy import whatsapp_lines as wl
 from drmagdy.extensions import compute_is_late, compute_ribbon_state
 
 
@@ -241,6 +242,67 @@ class KanbanDefaultOrderTests(SimpleTestCase):
 
         qs = self._view(["-no_such_column"]).get_queryset(Ticket)
         self.assertEqual(tuple(qs.query.order_by), ())
+
+
+class WhatsAppLineTests(SimpleTestCase):
+    """The "Send Ticket Image" wizard picks a line — a WhatsApp API account or
+    a WhatsApp Web connection — stored as ``"<kind>:<id>"``."""
+
+    def test_parse_line(self):
+        self.assertEqual(wl.parse_line("wa_web:1"), ("wa_web", 1))
+        self.assertEqual(wl.parse_line("whatsapp:3"), ("whatsapp", 3))
+        for bad in (None, "", "3", "whatsapp", "whatsapp:", "whatsapp:x", "messenger:3", {"id": 3}):
+            self.assertIsNone(wl.parse_line(bad), bad)
+
+    def test_customers_domain_targets_one_conversation_of_the_line(self):
+        leaves = wl.customers_domain("wa_web:1")["filters"]["filters"]
+        self.assertEqual(
+            {leaf["field"]: (leaf["operator"], leaf["value"]) for leaf in leaves},
+            {
+                "social_conversations__type": ("eq", "wa_web"),
+                "social_conversations__social_account_object_id": ("eq", 1),
+                "social_conversations__is_group": ("eq", False),
+            },
+        )
+
+    def test_no_line_matches_nothing(self):
+        """``in [None]``, never an ``eq`` null: the selection endpoint drops a
+        domain it cannot validate and would offer every partner."""
+        for value in (None, "", "bogus"):
+            leaves = wl.customers_domain(value)["filters"]["filters"]
+            self.assertEqual([(leaf["operator"], leaf["value"]) for leaf in leaves], [("in", [None])])
+
+    def test_onchange_narrows_the_picker_and_clears_the_selection(self):
+        result = wl.line_change_result("whatsapp:3")
+        self.assertEqual(result["value"], {"partners": []})
+        self.assertEqual(result["domain"]["partners"], wl.customers_domain("whatsapp:3"))
+
+    def test_label_names_the_channel_and_the_number(self):
+        account = SimpleNamespace(name=" Admin Pharmacy ", phone_number="201158039596")
+        self.assertEqual(wl.line_label(wl.WEB, account), "Admin Pharmacy — WhatsApp Web (+201158039596)")
+        self.assertEqual(wl.line_label(wl.API, SimpleNamespace(name="", phone_number=None)), "WhatsApp API — WhatsApp API")
+
+    def _wizard_fields(self, options, default):
+        with mock.patch.object(wl, "line_options", return_value=options), \
+                mock.patch.object(wl, "default_line", return_value=default):
+            view = _load_view_module("ui/views/send_ticket_image_views.py").send_ticket_image_form_view
+        fields = view["body"]["sheet"]["sections"][0]["groups"][0]["fields"]
+        return {field["name"]: field for field in fields}
+
+    def test_wizard_opens_on_the_default_line(self):
+        options = [{"value": "wa_web:1", "label": "Web"}, {"value": "whatsapp:3", "label": "API"}]
+        fields = self._wizard_fields(options, "wa_web:1")
+        self.assertEqual(fields["whatsapp_line"]["options"], options)
+        self.assertEqual(fields["whatsapp_line"]["defaultValue"], "wa_web:1")
+        # no onchange fires for a default: the picker opens on that line's customers
+        self.assertEqual(fields["partners"]["domain"], wl.customers_domain("wa_web:1"))
+
+    def test_wizard_without_a_default_offers_no_customer(self):
+        options = [{"value": "whatsapp:3", "label": "API"}]
+        for default in (None, "wa_web:9"):          # gone, or not in the dropdown
+            fields = self._wizard_fields(options, default)
+            self.assertNotIn("defaultValue", fields["whatsapp_line"])
+            self.assertEqual(fields["partners"]["domain"], wl.customers_domain(None))
 
 
 class TransitionRuleTests(TestCase):

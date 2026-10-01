@@ -664,6 +664,12 @@ msgstr "تم تخطي %(n)d عميل خارج نافذة الـ24 ساعة في 
 msgid "%(imgs)d image(s) queued for %(sent)d customer(s)."
 msgstr "تم إرسال %(imgs)d صورة إلى %(sent)d عميل."
 
+msgid "Nothing was sent: the WhatsApp Web number %(number)s is not connected. Reconnect it or pick another number."
+msgstr "لم يتم الإرسال: رقم واتساب ويب %(number)s غير متصل. أعد توصيله أو اختر رقمًا آخر."
+
+msgid "The number to send from: a WhatsApp Web connection or a WhatsApp API account."
+msgstr "الرقم الذي سيتم الإرسال منه: اتصال واتساب ويب أو حساب واتساب API."
+
 msgid "empty"
 msgstr "فارغ"
 

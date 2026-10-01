@@ -10,6 +10,7 @@ from modules.base.fields import AttachmentForeignKeyField
 from modules.base.decorators import action, onchange
 
 from .choices import CANCEL_MODE_CHOICES
+from .whatsapp_lines import line_change_result
 
 
 class BankRoshtat(BaseModel):
@@ -117,64 +118,39 @@ class BankRoshtat(BaseModel):
         }
 
 
-def send_wizard_account_change_result(account_id):
-    """Shared @onchange result for the "Send Ticket Image" wizard's
-    ``whatsapp_account`` field: narrow the Customers picker to partners who
-    have a conversation on the selected number, and clear stale selections.
-
-    Used by BOTH registrations of the onchange:
-    - ``SendTicketImageAction._onchange_whatsapp_account_filter_partners``
-      (the wizard's own model — correct for direct API callers), and
-    - ``TicketExtension._onchange_wizard_whatsapp_account`` (support.ticket —
-      the model the action-slideover frontend ACTUALLY posts onchange with,
-      because MiniForm's ``model`` prop carries the selected records' model).
-
-    Returning ``None`` as a field's domain clears the dynamic filter and falls
-    back to the static schema domain.
-    """
-    from django.contrib.contenttypes.models import ContentType
-    from django.apps import apps
-
-    if not account_id:
-        return {'domain': {'partners': None}, 'value': {'partners': []}}
-
-    WhatsAppAccount = apps.get_model('whatsapp', 'whatsappaccount')
-    account_ct = ContentType.objects.get_for_model(WhatsAppAccount)
-
-    # partner+account conversation is unique (chat constraint), so this
-    # reverse join cannot duplicate partner rows.
-    return {
-        'domain': {
-            'partners': {
-                'filters': {
-                    'operator': 'and',
-                    'filters': [
-                        {'field': 'social_conversations__social_account_content_type_id', 'operator': 'eq', 'value': account_ct.id},
-                        {'field': 'social_conversations__social_account_object_id', 'operator': 'eq', 'value': account_id},
-                        {'field': 'social_conversations__type', 'operator': 'eq', 'value': 'whatsapp'},
-                    ],
-                },
-            },
-        },
-        'value': {'partners': []},
-    }
-
-
 class SendTicketImageAction(TransientModel):
     """Wizard input for ``action_send_ticket_image_to_conversations`` (defined
     on ``support.ticket`` via ``TicketExtension`` in ``extensions.py``).
 
     Transient (auto-expires ~1h, cleaned by the daily Celery task). Collects:
-    the WhatsApp number to send from, the customers to send to (each resolves
-    to their single conversation on that number), and an optional caption.
+    the WhatsApp line to send from (an API account or a WhatsApp Web
+    connection, see ``whatsapp_lines.py``), the customers to send to (each
+    resolves to their single conversation on that line), and an optional
+    caption.
     """
 
     class Meta:
         verbose_name = _("Send Ticket Image")
 
+    # ``"<kind>:<account id>"`` — see ``whatsapp_lines.py``. The database
+    # default keeps the previous release (which does not know this column)
+    # able to insert its rows.
+    whatsapp_line = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_default="",
+        verbose_name=_("WhatsApp Number"),
+        help_text=_("The number to send from: a WhatsApp Web connection or a WhatsApp API account."),
+    )
+
+    # Superseded by ``whatsapp_line`` and no longer written. The column stays,
+    # nullable, so the previous release keeps working against this schema.
     whatsapp_account = models.ForeignKey(
         'whatsapp.whatsappaccount',
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         verbose_name=_("WhatsApp Number"),
         help_text=_("The WhatsApp account (number) to send from."),
     )
@@ -194,12 +170,12 @@ class SendTicketImageAction(TransientModel):
         help_text=_("Optional message sent as the image caption."),
     )
 
-    @onchange('whatsapp_account')
-    def _onchange_whatsapp_account_filter_partners(self):
-        """Narrow the Customers picker to the selected number's customers and
-        clear stale selections. See ``send_wizard_account_change_result``.
+    @onchange('whatsapp_line')
+    def _onchange_whatsapp_line(self):
+        """Narrow the Customers picker to the selected line's customers and
+        clear stale selections. See ``whatsapp_lines.line_change_result``.
         """
-        return send_wizard_account_change_result(self.whatsapp_account_id)
+        return line_change_result(self.whatsapp_line)
 
 
 class CancelTicketAction(TransientModel):

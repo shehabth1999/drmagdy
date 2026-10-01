@@ -9,37 +9,41 @@ framework saves the transient record and calls
 ``Ticket.action_send_ticket_image_to_conversations(queryset, form)``
 (defined on ``TicketExtension`` in ``drmagdy/extensions.py``).
 
-Flow: pick a WhatsApp number → the Customers picker narrows (via the
-``@onchange('whatsapp_account')`` dynamic domain) to partners who have a
-conversation on that number, shown by their name → optional caption message.
+Flow: pick a WhatsApp number — a WhatsApp Web connection or a WhatsApp API
+account, both listed in ONE dropdown (see ``drmagdy/whatsapp_lines.py``) → the
+Customers picker narrows (via the ``@onchange('whatsapp_line')`` dynamic
+domain) to partners who have a conversation on that number, shown by their
+name → optional caption message.
+
+The dropdown's options, its default and the Customers domain of that default
+are resolved when the view is SYNCED (the dict is stored in the DB): re-run
+``sync_ui_views`` after connecting, renaming or removing a number.
 """
 from django.utils.translation import gettext as _
 
+from drmagdy.whatsapp_lines import customers_domain, default_line, line_options
 
-def _default_whatsapp_account():
-    """Default number for the wizard: the account named "Admin Pharmacy".
 
-    Resolved by NAME when the view is synced (the dict is stored in the DB), so a
-    re-created account row still matches; returns None (no default) when it does
-    not exist so the wizard keeps working. Re-run ``sync_ui_views`` after
-    renaming or re-creating the account.
-    """
+def _resolve_lines():
+    """``(options, default)`` of the number dropdown; empty when the account
+    tables are not there yet (early import), so the view stays importable."""
     try:
-        from django.apps import apps
-
-        WhatsAppAccount = apps.get_model("whatsapp", "whatsappaccount")
-        row = (
-            WhatsAppAccount.objects.filter(active=True, name__icontains="Admin Pharmacy")
-            .order_by("id")
-            .values("id", "name")
-            .first()
-        )
-        return {"id": row["id"], "name": row["name"].strip()} if row else None
+        options = line_options()
+        default = default_line()
     except Exception:  # pragma: no cover - table missing / early import
-        return None
+        return [], None
+    # Never default to a line the dropdown does not offer.
+    if default not in {option["value"] for option in options}:
+        default = None
+    return options, default
 
 
-_DEFAULT_ACCOUNT = _default_whatsapp_account()
+_LINE_OPTIONS, _DEFAULT_LINE = _resolve_lines()
+
+_NO_LINE = {"or": [
+    {"field": "whatsapp_line", "operator": "is_null"},
+    {"field": "whatsapp_line", "operator": "eq", "value": ""},
+]}
 
 
 send_ticket_image_form_view = {
@@ -59,25 +63,18 @@ send_ticket_image_form_view = {
                             "fullWidth": True,
                             "fields": [
                                 {
-                                    "name": "whatsapp_account",
+                                    "name": "whatsapp_line",
                                     "string": _("WhatsApp Number"),
-                                    "widget": "relation",
-                                    "displayField": "name",
-                                    "multiSelect": False,
+                                    "widget": "select",
+                                    # A list (not a dict) keeps the order: the
+                                    # stored JSON would re-sort dict keys.
+                                    "options": _LINE_OPTIONS,
                                     "required": True,
                                     "onChange": True,
-                                    # Pre-selected number (see _default_whatsapp_account);
+                                    # Pre-selected number (see whatsapp_lines.default_line);
                                     # the Customers picker is filtered by it from the start.
-                                    **({"defaultValue": _DEFAULT_ACCOUNT} if _DEFAULT_ACCOUNT else {}),
-                                    "help": _("The WhatsApp account (number) to send from."),
-                                    "domain": {
-                                        "filters": {
-                                            "operator": "and",
-                                            "filters": [
-                                                {"field": "active", "operator": "eq", "value": True},
-                                            ],
-                                        }
-                                    },
+                                    **({"defaultValue": _DEFAULT_LINE} if _DEFAULT_LINE else {}),
+                                    "help": _("The number to send from: a WhatsApp Web connection or a WhatsApp API account."),
                                 },
                                 {
                                     "name": "partners",
@@ -86,31 +83,19 @@ send_ticket_image_form_view = {
                                     "displayField": "name",
                                     "multiSelect": True,
                                     "required": True,
-                                    # Locked until a number is picked — guarantees the
-                                    # picker only ever offers customers whose conversation
-                                    # is on the SELECTED number (the @onchange narrows the
-                                    # domain when whatsapp_account changes), so the send
-                                    # can never hit "no conversation on this number".
-                                    "readonly": {"field": "whatsapp_account", "operator": "is_null"},
+                                    # Locked until a number is picked.
+                                    "readonly": _NO_LINE,
                                     "help": _("Customers to send the image to — pick the WhatsApp number first."),
                                     "placeholder": _("Select a WhatsApp number first..."),
-                                    # The dependency lives in the STATIC domain via a live
-                                    # form-value placeholder — no reliance on onchange.
-                                    # `in` (not `eq`): when no number is picked yet the
-                                    # placeholder resolves to [null] → SQL `IN (NULL)`
-                                    # matches NOTHING (an unresolved `eq` null fails
-                                    # pydantic validation and the selection endpoint
-                                    # would silently drop the whole domain → ALL
-                                    # partners). Verified: [null]→0 rows, [id]→exact.
-                                    "domain": {
-                                        "filters": {
-                                            "operator": "and",
-                                            "filters": [
-                                                {"field": "social_conversations__type", "operator": "eq", "value": "whatsapp"},
-                                                {"field": "social_conversations__social_account_object_id", "operator": "in", "value": ["{{whatsapp_account.id}}"]},
-                                            ],
-                                        }
-                                    },
+                                    # Customers of the DEFAULT number: no onchange
+                                    # fires for a default value, so the form must
+                                    # open already filtered. Picking another number
+                                    # replaces this with that number's customers
+                                    # (dynamic domain returned by the onchange). If
+                                    # the two ever disagree the send handler refuses
+                                    # the whole send and names the customers that
+                                    # have no conversation on the picked number.
+                                    "domain": customers_domain(_DEFAULT_LINE),
                                 },
                                 {
                                     "name": "message",
