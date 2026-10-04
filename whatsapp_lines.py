@@ -12,6 +12,10 @@ the wizard's dropdown has to list both, so the pick is stored as one string,
 Used by the wizard view (dropdown options, default line and the Customers
 domain are computed when the view is synced), by both registrations of the
 wizard's ``@onchange`` and by the send handler.
+
+Only WhatsApp Web lines are offered: the pharmacy stopped sending through the
+Meta API (2026-10-04), whose 24-hour window refused most sends. The API code
+path stays; put ``API`` back in ``OFFERED_KINDS`` to list those accounts again.
 """
 from django.apps import apps
 
@@ -25,6 +29,9 @@ LINE_MODELS = {
 }
 
 CHANNEL_NAMES = {API: "WhatsApp API", WEB: "WhatsApp Web"}
+
+# Kinds the wizard offers and sends through, in dropdown order.
+OFFERED_KINDS = (WEB,)
 
 # The wizard opens on the number of this API account (matched by NAME, so a
 # re-created account row still matches) — through its WhatsApp Web connection
@@ -53,9 +60,10 @@ def parse_line(value):
 
 
 def get_line_account(value):
-    """``(kind, account)`` of the ACTIVE account behind a line, else ``(None, None)``."""
+    """``(kind, account)`` of the ACTIVE account behind an OFFERED line, else
+    ``(None, None)``."""
     parsed = parse_line(value)
-    if parsed is None:
+    if parsed is None or parsed[0] not in OFFERED_KINDS:
         return None, None
     kind, account_id = parsed
     model = _account_model(kind)
@@ -73,9 +81,9 @@ def line_label(kind, account):
 
 
 def line_options():
-    """Options of the wizard's dropdown, WhatsApp Web connections first."""
+    """Options of the wizard's dropdown: every active account of the offered kinds."""
     options = []
-    for kind in (WEB, API):
+    for kind in OFFERED_KINDS:
         model = _account_model(kind)
         if model is None:
             continue
@@ -87,8 +95,10 @@ def line_options():
 def default_line():
     """The line the wizard opens on, or None when the default account is gone.
 
-    The WhatsApp Web connection of the ``DEFAULT_ACCOUNT_NAME`` number; the API
-    account itself when that number has no WhatsApp Web connection.
+    The WhatsApp Web connection of the ``DEFAULT_ACCOUNT_NAME`` number (the
+    number is read from the API account row, which stays even though the
+    pharmacy no longer sends through it); the API account itself when that
+    number has no WhatsApp Web connection and API lines are offered.
     """
     model = _account_model(API)
     if model is None:
@@ -105,7 +115,9 @@ def default_line():
         from modules.wa_web.services.paired_line import paired_wa_web_account
 
         web = paired_wa_web_account(account)
-    return line_key(WEB, web.pk) if web else line_key(API, account.pk)
+    if web:
+        return line_key(WEB, web.pk)
+    return line_key(API, account.pk) if API in OFFERED_KINDS else None
 
 
 def customers_domain(value):

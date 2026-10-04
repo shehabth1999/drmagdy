@@ -254,6 +254,12 @@ class WhatsAppLineTests(SimpleTestCase):
         for bad in (None, "", "3", "whatsapp", "whatsapp:", "whatsapp:x", "messenger:3", {"id": 3}):
             self.assertIsNone(wl.parse_line(bad), bad)
 
+    def test_only_offered_kinds_can_send(self):
+        """The pharmacy stopped using the Meta API: an API line is refused
+        before any lookup, so a stale or hand-made pick cannot send through it."""
+        self.assertEqual(wl.OFFERED_KINDS, (wl.WEB,))
+        self.assertEqual(wl.get_line_account("whatsapp:3"), (None, None))
+
     def test_customers_domain_targets_one_conversation_of_the_line(self):
         leaves = wl.customers_domain("wa_web:1")["filters"]["filters"]
         self.assertEqual(
